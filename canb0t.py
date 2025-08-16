@@ -132,7 +132,10 @@ def sniff_mode(sock: socket.socket, writer: csv.writer) -> int:
         while True:
             try:
                 line = f.readline()
-            except socket.timeout:
+            except (socket.timeout, OSError) as err:
+                # socket.makefile() may raise OSError("cannot read from timed out object")
+                if isinstance(err, OSError) and err.errno not in (None, 0):
+                    raise
                 if frame_count == 0 and not waiting_notice:
                     console.print("[yellow]No traffic detected yet — waiting…[/]")
                     waiting_notice = True
