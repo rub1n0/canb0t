@@ -78,6 +78,11 @@ def send_command(sock: socket.socket, cmd: str, timeout: float = 1.0) -> str:
     """Send a command and return the response."""
     logging.debug("TX: %s", cmd)
     try:
+        # Clear any leftover bytes to avoid desync with the adapter
+        with suppress(socket.timeout):
+            sock.settimeout(0.1)
+            while sock.recv(1024):
+                pass
         sock.sendall((cmd + "\r").encode())
         sock.settimeout(timeout)
         data = b""
@@ -116,18 +121,28 @@ def make_panel(frame_count: int, id_set: set, start: float) -> Panel:
 def sniff_mode(sock: socket.socket, writer: csv.writer) -> int:
     console.print("ESTABLISHING LINK TO TARGET ECU…")
     send_command(sock, "ATMA")
+    # Use a short timeout so we can periodically check for traffic
+    sock.settimeout(1.0)
     frame_count = 0
     id_set = set()
     start = time.monotonic()
+    waiting_notice = False
     f = sock.makefile()
     with Live(make_panel(frame_count, id_set, start), console=console, refresh_per_second=4) as live:
         while True:
-            line = f.readline()
+            try:
+                line = f.readline()
+            except socket.timeout:
+                if frame_count == 0 and not waiting_notice:
+                    console.print("[yellow]No traffic detected yet — waiting…[/]")
+                    waiting_notice = True
+                continue
             if not line:
                 continue
             line = line.strip()
             if not line or line.startswith("OK"):
                 continue
+            waiting_notice = False
             parts = line.split()
             if len(parts) < 3:
                 continue
