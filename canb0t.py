@@ -100,6 +100,18 @@ def send_command(sock: socket.socket, cmd: str, timeout: float = 1.0) -> str:
     return resp
 
 
+def wait_for_interface(ip: str, port: int, retry_delay: float = 1.0) -> socket.socket:
+    """Keep trying to connect to the adapter until it is reachable."""
+    while True:
+        try:
+            return socket.create_connection((ip, port))
+        except OSError as exc:
+            console.print(
+                f"[yellow]Interface offline ({exc}) — waiting {retry_delay}s…[/]"
+            )
+            time.sleep(retry_delay)
+
+
 def init_elm327(sock: socket.socket) -> None:
     for cmd, desc in INIT_COMMANDS:
         with console.status(f"{desc}…", spinner="dots"):
@@ -120,14 +132,19 @@ def make_panel(frame_count: int, id_set: set, start: float) -> Panel:
 
 def sniff_mode(sock: socket.socket, writer: csv.writer) -> int:
     console.print("ESTABLISHING LINK TO TARGET ECU…")
-    send_command(sock, "ATMA")
+    # Clear any residual data then start monitoring without waiting for prompt
+    with suppress(socket.timeout):
+        sock.settimeout(0.1)
+        while sock.recv(1024):
+            pass
+    sock.sendall(b"ATMA\r")
     # Use a short timeout so we can periodically check for traffic
     sock.settimeout(1.0)
     frame_count = 0
     id_set = set()
     start = time.monotonic()
     waiting_notice = False
-    f = sock.makefile()
+    f = sock.makefile("r", newline="\r")
     with Live(make_panel(frame_count, id_set, start), console=console, refresh_per_second=4) as live:
         while True:
             try:
@@ -169,7 +186,7 @@ def pid_mode(sock: socket.socket, writer: csv.writer) -> int:
     frame_count = 0
     id_set = set()
     start = time.monotonic()
-    f = sock.makefile()
+    f = sock.makefile("r", newline="\r")
     try:
         while True:
             for name, cmd in PID_COMMANDS.items():
@@ -213,7 +230,7 @@ def main() -> int:
     frame_count = 0
     try:
         logging.info("Connecting to %s:%s", args.ip, args.port)
-        with socket.create_connection((args.ip, args.port)) as sock, open(args.outfile, "w", newline="") as csvfile:
+        with wait_for_interface(args.ip, args.port) as sock, open(args.outfile, "w", newline="") as csvfile:
             logging.info("Connection established")
             writer = csv.writer(csvfile)
             writer.writerow(["timestamp_iso", "ts_ms", "id", "dlc", "data_hex"])
