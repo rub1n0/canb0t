@@ -1,53 +1,26 @@
 # canb0t
 
-canb0t is a retro-styled CAN bus logger for ELM327-compatible OBD-II adapters. It can sniff raw CAN traffic or poll a set of common PIDs, storing results in a CSV file with a flashy hacker console.
+Arduino sketch for logging CAN bus traffic on a SparkFun RedBoard with the SparkFun CAN-Bus Shield. The sketch writes all CAN frames and basic OBD-II PID responses to a microSD card.
 
 ## Features
-- Initializes an ELM327 adapter and logs every command and response to a debug file
-- **Sniff mode** captures raw CAN frames with a live dashboard showing frame count, unique IDs, and capture rate
-- **PID mode** queries selected PIDs like RPM, speed, throttle, and coolant temperature
-- Saves all frames with timestamps to a CSV output file
-- Rich-based neon console with random one-liners for style
-
-## Installation
-1. Ensure Python 3.11+ is installed
-2. Install dependencies:
-   ```bash
-   pip install rich python-dotenv
-   ```
-3. Optionally create a virtual environment before installing
+- Initializes the MCP2515 CAN controller and SD card
+- Optional PID polling for RPM, speed, throttle and coolant temperature
+- Logs every frame with timestamp to `canlog.csv` on the shield's microSD card
+- Mirrors frames over the serial port at 115200 baud
 
 ## Setup
-- The script reads configuration from environment variables or command-line flags. Place values in a `.env` file or export them before running.
-  - `IP` – adapter IP address (default `192.168.0.10`)
-  - `PORT` – adapter TCP port (default `35000`)
-  - `OUTFILE` – CSV output file (default `can_log.csv`)
-  - `LOGFILE` – debug log file (default `canb0t.log`)
-  - `MODE` – `sniff` or `pid` (default `sniff`)
+1. Install the [MCP_CAN library](https://github.com/coryjfowler/MCP_CAN_lib) and the built-in SD library in the Arduino IDE.
+2. Assemble the SparkFun CAN-Bus Shield on the RedBoard and insert a microSD card.
+3. Open `canb0t_redboard.ino` in the Arduino IDE.
+4. Set `PID_MODE` to `true` to enable PID polling or `false` to sniff raw frames.
+5. Upload to the board and open the serial monitor at 115200 baud to view live output.
 
-## Usage
-Show help:
-```bash
-python canb0t.py --help
+## SD Logging
+When running, the sketch creates `canlog.csv` on the microSD card with lines formatted as:
+
+```
+timestamp_ms,id,dlc,data
+1234,1AB,8,00 FF AA BB CC DD EE FF
 ```
 
-Sniff raw frames and log debug output:
-```bash
-python canb0t.py --ip 192.168.0.10 --port 35000 --mode sniff --logfile debug.log
-```
-
-Poll for PID data:
-```bash
-python canb0t.py --mode pid --outfile pid_data.csv
-```
-
-Captured frames are written to the CSV file and debug messages go to the log file, assisting with OBD-II connection troubleshooting.
-
-## SparkFun RedBoard with CAN-Bus Shield
-
-An Arduino sketch (`canb0t_redboard.ino`) is included for running canb0t on a SparkFun RedBoard paired with the [SparkFun CAN-Bus Shield](https://www.sparkfun.com/products/13262). The sketch uses the MCP2515 controller to sniff raw frames or query a few common OBD-II PIDs.
-
-1. Install the [MCP_CAN library](https://github.com/coryjfowler/MCP_CAN_lib) in the Arduino IDE.
-2. Open `canb0t_redboard.ino`.
-3. Set `PID_MODE` to `true` to enable PID polling; otherwise, the sketch logs all observed frames.
-4. Upload to the board and open the serial monitor at 115200 baud to view the log.
+Each line contains the millisecond timestamp, CAN identifier, data length code, and hex data bytes.
