@@ -1,21 +1,18 @@
 // CAN logging sketch for SparkFun RedBoard + CAN-Bus Shield
 #include <SPI.h>
 #include <SD.h>
-#include <mcp_can.h>
+#include <Canbus.h>
+#include <defaults.h>
+#include <global.h>
+#include <mcp2515.h>
+#include <mcp2515_defs.h>
 
 // Change to true to enable OBD-II PID polling mode
 const bool PID_MODE = false; // false = sniff mode, true = PID mode
 
-// MCP2515 and SD card CS pins on SparkFun CAN-Bus Shield
-const int CAN_CS = 10;
+// SD card CS pin on SparkFun CAN-Bus Shield
 const int SD_CS  = 9;
-MCP_CAN CAN0(CAN_CS);
 File logFile;
-
-// Buffer for incoming frames
-unsigned long canId;
-byte len;
-byte buf[8];
 
 // OBD-II PID commands (service 01)
 const unsigned char PID_RPM[8]      = {0x02, 0x01, 0x0C, 0, 0, 0, 0, 0};
@@ -47,7 +44,7 @@ void setup() {
   }
   logFile.println(F("timestamp_ms,id,dlc,data"));
 
-  if (CAN0.begin(MCP_STDEXT, CAN_500KBPS, MCP_8MHZ) == CAN_OK) {
+  if (Canbus.init(CANSPEED_500)) {
     Serial.println(F("CAN init ok"));
   } else {
     Serial.println(F("CAN init failed"));
@@ -55,8 +52,6 @@ void setup() {
       delay(1000);
     }
   }
-
-  CAN0.setMode(MCP_NORMAL);
 }
 
 void loop() {
@@ -68,10 +63,11 @@ void loop() {
 }
 
 void sniff() {
-  if (CAN0.checkReceive() == CAN_MSGAVAIL) {
-    CAN0.readMsgBuf(&len, buf);
-    canId = CAN0.getCanId();
-    logFrame(canId, len, buf);
+  tCAN message;
+  if (mcp2515_check_message()) {
+    if (mcp2515_get_message(&message)) {
+      logFrame(message.id, message.header.length, message.data);
+    }
   }
 }
 
@@ -90,17 +86,26 @@ void sendPid(const unsigned char *data) {
   // Standard OBD-II request ID
   const unsigned long reqId = 0x7DF;
 
-  if (CAN0.sendMsgBuf(reqId, 0, 8, data) == CAN_OK) {
-    logFrame(reqId, 8, data);
-    if (CAN0.checkReceive() == CAN_MSGAVAIL) {
-      CAN0.readMsgBuf(&len, buf);
-      canId = CAN0.getCanId();
-      logFrame(canId, len, buf);
+  tCAN txMsg;
+  txMsg.id = reqId;
+  txMsg.header.rtr = 0;
+  txMsg.header.length = 8;
+  for (int i = 0; i < 8; i++) {
+    txMsg.data[i] = data[i];
+  }
+  mcp2515_send_message(&txMsg);
+  logFrame(txMsg.id, txMsg.header.length, txMsg.data);
+
+  delay(10);
+  tCAN rxMsg;
+  if (mcp2515_check_message()) {
+    if (mcp2515_get_message(&rxMsg)) {
+      logFrame(rxMsg.id, rxMsg.header.length, rxMsg.data);
     } else {
       Serial.println(F("No response"));
     }
   } else {
-    Serial.println(F("PID send failed"));
+    Serial.println(F("No response"));
   }
 }
 
