@@ -23,6 +23,7 @@ import time
 import socket
 from dataclasses import dataclass
 from typing import Optional
+import os
 
 try:
     import serial  # type: ignore
@@ -49,7 +50,7 @@ class CANFrame:
     can_id: int
     dlc: int
     data: list[int]
-
+    os.system("cls" if os.name == "nt" else "clear")
 
 PID_NAMES: dict[int, str] = {
     0x0C: "ENGINE_RPM",
