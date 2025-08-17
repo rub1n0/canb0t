@@ -53,3 +53,6 @@ python can_engine.py send output.dbc DOOR_UNLOCK_CMD --channel can0
 
 The generated `output.dbc` can still be used with common CAN analysis
 tools for further exploration.
+
+Running `python can_engine.py` with no arguments now launches an
+interactive menu allowing you to choose from the above functions.

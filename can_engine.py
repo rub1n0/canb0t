@@ -392,6 +392,70 @@ class CANEngine:
             log_line(f"Sent request for {PID_NAMES[pid]}")
 
 
+    def main_menu(self) -> None:
+        """Present a high-level functionality menu."""
+        while True:
+            print_divider()
+            print(neon("\nSelect function:", NEON_MAGENTA))
+            options = [
+                "Parse CAN log",
+                "Build DBC from log",
+                "Log frames from serial port",
+                "Send command from DBC",
+                "Interactive PID menu",
+            ]
+            for idx, name in enumerate(options, 1):
+                print(neon(f"{idx}. {name}"))
+            print(neon("0. EXIT", NEON_MAGENTA))
+            choice = input("[CMD] > ")
+            if choice == "1":
+                path = input("Log path: ")
+                frames = self.parse_log(path)
+                for f in frames[:10]:
+                    decoded = self.decode_obd_pid(f)
+                    if decoded:
+                        log_line(f"0x{f.can_id:03X} :: {decoded}")
+            elif choice == "2":
+                log_path = input("Log path: ")
+                output = input("Output DBC path: ")
+                frames = self.parse_log(log_path)
+                self.build_dbc(frames, output)
+                log_line(f"DBC WRITTEN TO {output}")
+            elif choice == "3":
+                port = input("Serial port: ")
+                try:
+                    baud = int(input("Baudrate [115200]: ") or "115200")
+                except ValueError:
+                    system_alert("Invalid baudrate")
+                    continue
+                self.log_serial_frames(port, baud)
+            elif choice == "4":
+                dbc = input("DBC path: ")
+                self.load_dbc(dbc)
+                message = input("Message name: ")
+                signal_pairs = input(
+                    "Signals (name=value space-separated): "
+                ).split()
+                signals: dict[str, float] = {}
+                for pair in signal_pairs:
+                    if "=" in pair:
+                        name, val = pair.split("=", 1)
+                        try:
+                            signals[name] = float(val)
+                        except ValueError:
+                            system_alert(f"Invalid value for {name}")
+                channel = input("Channel [can0]: ") or "can0"
+                self.send_command(message, channel, **signals)
+                log_line("TRANSMISSION COMPLETE", NEON_GREEN)
+            elif choice == "5":
+                channel = input("Channel [can0]: ") or "can0"
+                self.interactive_menu(channel)
+            elif choice == "0":
+                break
+            else:
+                system_alert("Invalid selection")
+
+
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
@@ -458,7 +522,7 @@ def main() -> None:
     elif args.cmd == "menu":
         engine.interactive_menu(args.channel)
     else:
-        parser.print_help()
+        engine.main_menu()
 
 
 if __name__ == "__main__":
