@@ -200,9 +200,28 @@ BO_ 1530 MSG_5FA: 6 Vector__XXX
  SG_ BYTE4 : 32|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE5 : 40|8@1+ (1,0) [0|255] "" Vector__XXX
 
-BO_ 1531 MSG_5FB: 3 Vector__XXX
- SG_ BYTE0 : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+BO_ 1531 DOOR_LOCK_CMD: 3 Vector__XXX
+ SG_ LOCK_CMD : 0|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE1 : 8|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE2 : 16|8@1+ (1,0) [0|255] "" Vector__XXX
 
+BO_ 1533 MSG_5FD: 7 Vector__XXX
+ SG_ BYTE0 : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ BYTE1 : 8|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ BYTE2 : 16|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ BYTE3 : 24|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ BYTE4 : 32|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ BYTE5 : 40|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ BYTE6 : 48|8@1+ (1,0) [0|255] "" Vector__XXX
+
+BO_ 1534 MSG_5FE: 4 Vector__XXX
+ SG_ BYTE0 : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ BYTE1 : 8|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ BYTE2 : 16|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ BYTE3 : 24|8@1+ (1,0) [0|255] "" Vector__XXX
+
+BO_ 1984 MSG_7C0: 3 Vector__XXX
+ SG_ BYTE0 : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ BYTE1 : 8|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ BYTE2 : 16|8@1+ (1,0) [0|255] "" Vector__XXX
 
