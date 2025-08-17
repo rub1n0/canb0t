@@ -56,3 +56,20 @@ tools for further exploration.
 
 Running `python can_engine.py` with no arguments now launches an
 interactive menu allowing you to choose from the above functions.
+
+### Interactive Menu Items
+
+The main menu presents numbered options. Enter the number of the desired
+action or `0` to exit:
+
+1. **Parse CAN log** – Prompts for the path to a log file, decodes its
+   frames and prints the first few interpreted OBD‑II signals.
+2. **Build DBC from log** – Requests a log file and destination path, then
+   constructs a DBC file describing observed frames.
+3. **Log frames from serial port** – Asks for the serial port and optional
+   baud rate to record live traffic to the console.
+4. **Send command from DBC** – Loads a specified DBC, asks for a message
+   name and signal values, and transmits the command on a chosen channel.
+5. **Interactive PID menu** – Opens a submenu listing common OBD‑II PIDs
+   that can be requested repeatedly; choose `0` within this submenu to
+   return to the main menu.
