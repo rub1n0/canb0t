@@ -399,10 +399,13 @@ class CANEngine:
                     system_alert(f"Invalid value for {sig.name}")
         return self.send_command(chosen.name, channel, **signals)
 
-    def send_pid_request(self, pid: int, channel: str = "can0") -> bool:
-        """Send a simple OBD-II PID request frame.
+    def send_pid_request(
+        self, pid: int, channel: str = "can0", timeout: float = 1.0
+    ) -> Optional[str]:
+        """Send an OBD-II PID request and wait for a response.
 
-        Returns ``True`` if the request was transmitted successfully.
+        Returns the decoded response string if a frame is received within
+        ``timeout`` seconds, otherwise ``None``.
         """
         if can is None:
             raise RuntimeError("python-can is required to send PID requests")
@@ -414,11 +417,24 @@ class CANEngine:
                     bus.send(can.Message(arbitration_id=0x7DF, data=data))
                 except can.CanError as exc:
                     system_alert(f"Failed to send CAN message: {exc}")
-                    return False
+                    return None
+                try:
+                    msg = bus.recv(timeout)
+                except can.CanError as exc:
+                    system_alert(f"Failed to receive CAN message: {exc}")
+                    return None
+                if msg:
+                    frame = CANFrame(
+                        int(time.time() * 1000),
+                        msg.arbitration_id,
+                        msg.dlc,
+                        list(msg.data),
+                    )
+                    return self.decode_obd_pid(frame)
         except (OSError, NotImplementedError) as exc:
             system_alert(f"Failed to access CAN interface '{channel}': {exc}")
-            return False
-        return True
+            return None
+        return None
 
     def interactive_menu(self, channel: str = "can0") -> None:
         """Interactive menu allowing the user to send PID requests."""
@@ -448,8 +464,12 @@ class CANEngine:
             except (ValueError, IndexError):
                 system_alert("Invalid selection")
                 continue
-            if self.send_pid_request(pid, channel):
-                log_line(f"Sent request for {PID_NAMES[pid]}")
+            log_line(f"Sent request for {PID_NAMES[pid]}")
+            response = self.send_pid_request(pid, channel)
+            if response:
+                log_line(response)
+            else:
+                system_alert("No response received")
 
 
     def main_menu(self) -> None:
