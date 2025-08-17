@@ -361,14 +361,14 @@ class CANEngine:
         data = msg.encode(signals)
         interface = "socketcan" if hasattr(socket, "CMSG_SPACE") else "virtual"
         try:
-            bus = can.interface.Bus(channel=channel, interface=interface)
+            with can.interface.Bus(channel=channel, interface=interface) as bus:
+                try:
+                    bus.send(can.Message(arbitration_id=msg.frame_id, data=data))
+                except can.CanError as exc:
+                    system_alert(f"Failed to send CAN message: {exc}")
+                    return False
         except (OSError, NotImplementedError) as exc:
             system_alert(f"Failed to access CAN interface '{channel}': {exc}")
-            return False
-        try:
-            bus.send(can.Message(arbitration_id=msg.frame_id, data=data))
-        except can.CanError as exc:
-            system_alert(f"Failed to send CAN message: {exc}")
             return False
         return True
 
@@ -409,14 +409,14 @@ class CANEngine:
         data = bytes([0x02, 0x01, pid, 0x00, 0x00, 0x00, 0x00, 0x00])
         interface = "socketcan" if hasattr(socket, "CMSG_SPACE") else "virtual"
         try:
-            bus = can.interface.Bus(channel=channel, interface=interface)
+            with can.interface.Bus(channel=channel, interface=interface) as bus:
+                try:
+                    bus.send(can.Message(arbitration_id=0x7DF, data=data))
+                except can.CanError as exc:
+                    system_alert(f"Failed to send CAN message: {exc}")
+                    return False
         except (OSError, NotImplementedError) as exc:
             system_alert(f"Failed to access CAN interface '{channel}': {exc}")
-            return False
-        try:
-            bus.send(can.Message(arbitration_id=0x7DF, data=data))
-        except can.CanError as exc:
-            system_alert(f"Failed to send CAN message: {exc}")
             return False
         return True
 
