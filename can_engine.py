@@ -93,6 +93,78 @@ def neon(text: str, color: str = NEON_CYAN) -> str:
     return f"{color}{text}{RESET}"
 
 
+# -- Retro techno-thriller console helpers ---------------------------------
+
+def print_divider() -> None:
+    """Print a neon divider line."""
+    print(neon("═" * 60, NEON_MAGENTA))
+
+
+def print_banner(text: str) -> None:
+    """Render `text` as an ASCII art banner if possible."""
+    try:
+        from pyfiglet import figlet_format  # type: ignore
+
+        banner = figlet_format(text, font="slant")
+        print(neon(banner, NEON_MAGENTA))
+    except Exception:
+        # Fallback: simple framed text
+        framed = f"// {text.upper()} //"
+        print_divider()
+        print(neon(framed.center(60), NEON_MAGENTA))
+        print_divider()
+
+
+def print_progress_bar(progress: float) -> None:
+    """Display a chunky progress bar."""
+    blocks = 20
+    filled = int(blocks * progress)
+    bar = "▓" * filled + "░" * (blocks - filled)
+    pct = int(progress * 100)
+    print(neon(f"[{bar}] {pct}%", NEON_CYAN))
+
+
+def system_alert(message: str) -> None:
+    """Blare a system alert message."""
+    print(neon(f"[SYSTEM]: !!! {message.upper()} !!!", NEON_MAGENTA))
+
+
+def log_line(message: str, color: str = NEON_GREEN) -> None:
+    """Emit a time-stamped log line."""
+    ts = time.strftime("%H:%M:%S")
+    print(neon(f"[LOG {ts}] {message}", color))
+
+
+def glitch(text: str) -> str:
+    """Introduce a bit of retro terminal glitchiness."""
+    import random
+
+    glitched = []
+    for ch in text:
+        glitched.append(ch)
+        if random.random() < 0.1 and ch.isalpha():
+            glitched.append(ch)
+    return "".join(glitched)
+
+
+def pseudo_data_stream(lines: int = 3) -> None:
+    """Spew a stream of pseudo-random hex for dramatic effect."""
+    import random
+
+    for _ in range(lines):
+        chunk = " ".join(f"{random.randint(0,255):02X}" for _ in range(8))
+        log_line(chunk, NEON_CYAN)
+
+
+def simulate_progress(task: str, steps: int = 3, delay: float = 0.3) -> None:
+    """Simulate an animated task with dot progress and final bar."""
+    for i in range(steps):
+        print(neon(f"{task}{'.' * (i % 3 + 1)}", NEON_CYAN), end="\r")
+        time.sleep(delay)
+    print(neon(f"{task}...", NEON_CYAN))
+    print_progress_bar(1.0)
+
+
 # ---------------------------------------------------------------------------
 # CAN engine implementation
 # ---------------------------------------------------------------------------
@@ -288,6 +360,7 @@ class CANEngine:
 
     def interactive_menu(self, channel: str = "can0") -> None:
         """Interactive menu allowing the user to send PID requests."""
+        print_banner("ACCESS PANEL")
         if can is None:
             msg = "\n".join(
                 [
@@ -300,6 +373,7 @@ class CANEngine:
             print(neon(msg, NEON_MAGENTA))
             return
         while True:
+            print_divider()
             print(neon("\nSelect PID to request:", NEON_MAGENTA))
             for idx, (pid, name) in enumerate(PID_NAMES.items(), start=1):
                 print(neon(f"{idx}. {name} (0x{pid:02X})"))
@@ -310,10 +384,10 @@ class CANEngine:
             try:
                 pid = list(PID_NAMES.keys())[int(choice) - 1]
             except (ValueError, IndexError):
-                print(neon("Invalid selection", NEON_MAGENTA))
+                system_alert("Invalid selection")
                 continue
             self.send_pid_request(pid, channel)
-            print(neon(f"Sent request for {PID_NAMES[pid]}", NEON_GREEN))
+            log_line(f"Sent request for {PID_NAMES[pid]}")
 
 
 # ---------------------------------------------------------------------------
@@ -348,23 +422,28 @@ def main() -> None:
     args = parser.parse_args()
     engine = CANEngine()
     print(BANNER)
+    print_banner("CONNECTION ESTABLISHED")
+    pseudo_data_stream(2)
 
     if args.cmd == "parse":
-        print(neon(">> INITIATING LOG PARSE SEQUENCE <<", NEON_MAGENTA))
+        print_banner("ACCESS GRANTED")
+        system_alert("TRACE ROUTE INITIATED")
+        simulate_progress("Processing log")
         frames = engine.parse_log(args.log)
         for f in frames[:10]:
             decoded = engine.decode_obd_pid(f)
             if decoded:
-                print(neon(f"[{f.timestamp_ms}] 0x{f.can_id:03X} :: {decoded}", NEON_GREEN))
+                log_line(f"0x{f.can_id:03X} :: {decoded}")
     elif args.cmd == "builddbc":
-        print(neon(">> ASSEMBLING DBC MATRIX <<", NEON_MAGENTA))
+        print_banner("ASSEMBLING DBC")
+        simulate_progress("Compiling")
         frames = engine.parse_log(args.log)
         engine.build_dbc(frames, args.output)
-        print(neon(f"DBC WRITTEN TO {args.output}", NEON_GREEN))
+        log_line(f"DBC WRITTEN TO {args.output}")
     elif args.cmd == "serial":
         engine.log_serial_frames(args.port, args.baudrate)
     elif args.cmd == "send":
-        print(neon(">> TRANSMISSION COMMENCING <<", NEON_MAGENTA))
+        print_banner("TRANSMISSION")
         engine.load_dbc(args.dbc)
         signal_values = {}
         for pair in args.signals:
@@ -373,7 +452,7 @@ def main() -> None:
             name, val = pair.split("=", 1)
             signal_values[name] = float(val)
         engine.send_command(args.message, args.channel, **signal_values)
-        print(neon(">> TRANSMISSION COMPLETE <<", NEON_GREEN))
+        log_line("TRANSMISSION COMPLETE", NEON_GREEN)
     elif args.cmd == "menu":
         engine.interactive_menu(args.channel)
     else:
