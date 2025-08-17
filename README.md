@@ -47,8 +47,9 @@ python can_engine.py builddbc CANLOG.CSV output.dbc
 # Log frames arriving on a serial port
 python can_engine.py serial COM3
 
-# Send a command defined in the DBC
+# Send a command defined in the DBC (message optional)
 python can_engine.py send output.dbc DOOR_UNLOCK_CMD --channel can0
+# omitting the message name will prompt for available messages and signals
 ```
 
 The generated `output.dbc` can still be used with common CAN analysis
@@ -68,8 +69,9 @@ action or `0` to exit:
    constructs a DBC file describing observed frames.
 3. **Log frames from serial port** – Asks for the serial port and optional
    baud rate to record live traffic to the console.
-4. **Send command from DBC** – Loads a specified DBC, asks for a message
-   name and signal values, and transmits the command on a chosen channel.
+4. **Send command from DBC** – Loads a specified DBC, presents the available
+   message names for selection and prompts for each signal value before
+   transmitting the command on a chosen channel.
 5. **Interactive PID menu** – Opens a submenu listing common OBD‑II PIDs
    that can be requested repeatedly; choose `0` within this submenu to
    return to the main menu.
