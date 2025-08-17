@@ -2,6 +2,8 @@ import argparse
 import re
 import time
 from typing import Dict
+import threading
+import sys
 
 import serial
 
@@ -16,11 +18,34 @@ PATTERN = re.compile(r"ID: 0x([0-9A-F]+)\s+DLC:(\d+)\s+Data:(.*)")
 
 
 def log_serial_frames(port: str, baudrate: int) -> None:
+    paused = False
+    stop = False
+
+    def control_loop() -> None:
+        nonlocal paused, stop
+        print("Type 'p' then Enter to pause, 'r' to resume, or 'q' to quit.")
+        for line in sys.stdin:
+            cmd = line.strip().lower()
+            if cmd == "p":
+                paused = True
+                print("Logging paused. Type 'r' to resume.")
+            elif cmd == "r":
+                paused = False
+                print("Logging resumed.")
+            elif cmd == "q":
+                stop = True
+                break
+
+    threading.Thread(target=control_loop, daemon=True).start()
+
     with serial.Serial(port, baudrate, timeout=1) as ser, open("CANLOG.CSV", "a") as log:
         if log.tell() == 0:
             log.write("timestamp_ms,id,dlc,data\n")
         try:
-            while True:
+            while not stop:
+                if paused:
+                    time.sleep(0.1)
+                    continue
                 line = ser.readline().decode("ascii", errors="ignore").strip()
                 match = PATTERN.match(line)
                 if not match:
@@ -36,7 +61,9 @@ def log_serial_frames(port: str, baudrate: int) -> None:
                     if pid in PID_NAMES:
                         id_field = PID_NAMES[pid]
                 ts_ms = int(time.time() * 1000)
-                log.write(f"{ts_ms},{id_field},{dlc},{' '.join(f'{b:02X}' for b in data_bytes)}\n")
+                log.write(
+                    f"{ts_ms},{id_field},{dlc},{' '.join(f'{b:02X}' for b in data_bytes)}\n"
+                )
                 log.flush()
         except KeyboardInterrupt:
             pass
