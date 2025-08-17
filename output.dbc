@@ -128,7 +128,7 @@ BO_ 1519 MSG_5EF: 5 Vector__XXX
  SG_ BYTE3 : 24|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE4 : 32|8@1+ (1,0) [0|255] "" Vector__XXX
 
-BO_ 1521 MSG_5F1: 7 Vector__XXX
+BO_ 1521 DOOR_UNLOCK_CMD: 7 Vector__XXX
  SG_ BYTE0 : 0|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE1 : 8|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE2 : 16|8@1+ (1,0) [0|255] "" Vector__XXX
@@ -204,4 +204,5 @@ BO_ 1531 MSG_5FB: 3 Vector__XXX
  SG_ BYTE0 : 0|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE1 : 8|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE2 : 16|8@1+ (1,0) [0|255] "" Vector__XXX
+
 
