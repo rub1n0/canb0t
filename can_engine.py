@@ -289,7 +289,16 @@ class CANEngine:
     def interactive_menu(self, channel: str = "can0") -> None:
         """Interactive menu allowing the user to send PID requests."""
         if can is None:
-            raise RuntimeError("python-can is required to send PID requests")
+            msg = "\n".join(
+                [
+                    "╔════════════════════════════════════════════════════════════╗",
+                    "║  python-can module not detected!                          ║",
+                    "║  Install it with: pip install python-can                  ║",
+                    "╚════════════════════════════════════════════════════════════╝",
+                ]
+            )
+            print(neon(msg, NEON_MAGENTA))
+            return
         while True:
             print(neon("\nSelect PID to request:", NEON_MAGENTA))
             for idx, (pid, name) in enumerate(PID_NAMES.items(), start=1):
