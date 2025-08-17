@@ -192,10 +192,10 @@ BO_ 1529 MSG_5F9: 8 Vector__XXX
  SG_ BYTE6 : 48|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE7 : 56|8@1+ (1,0) [0|255] "" Vector__XXX
 
-BO_ 1530 MSG_5FA: 6 Vector__XXX
+BO_ 1530 SUSPENSION_STATUS: 6 Vector__XXX
  SG_ BYTE0 : 0|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE1 : 8|8@1+ (1,0) [0|255] "" Vector__XXX
- SG_ BYTE2 : 16|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ LEVEL : 16|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE3 : 24|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE4 : 32|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE5 : 40|8@1+ (1,0) [0|255] "" Vector__XXX
@@ -205,11 +205,11 @@ BO_ 1531 DOOR_LOCK_CMD: 3 Vector__XXX
  SG_ BYTE1 : 8|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE2 : 16|8@1+ (1,0) [0|255] "" Vector__XXX
 
-BO_ 1533 MSG_5FD: 7 Vector__XXX
+BO_ 1533 SUSPENSION_CMD: 7 Vector__XXX
  SG_ BYTE0 : 0|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE1 : 8|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE2 : 16|8@1+ (1,0) [0|255] "" Vector__XXX
- SG_ BYTE3 : 24|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ LEVEL : 24|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE4 : 32|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE5 : 40|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE6 : 48|8@1+ (1,0) [0|255] "" Vector__XXX
@@ -225,3 +225,5 @@ BO_ 1984 MSG_7C0: 3 Vector__XXX
  SG_ BYTE1 : 8|8@1+ (1,0) [0|255] "" Vector__XXX
  SG_ BYTE2 : 16|8@1+ (1,0) [0|255] "" Vector__XXX
 
+VAL_ 1533 LEVEL 81 "STANDARD" 82 "ACCESS" ;
+VAL_ 1530 LEVEL 162 "STANDARD" 166 "ACCESS" ;

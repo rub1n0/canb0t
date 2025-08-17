@@ -71,6 +71,23 @@ MESSAGE_NAMES: Dict[int, str] = {
     0x5FB: "DOOR_LOCK_CMD",
 }
 
+# Neon-soaked console styling for that 1980's techno-thriller vibe
+NEON_MAGENTA = "\033[95m"
+NEON_CYAN = "\033[96m"
+NEON_GREEN = "\033[92m"
+RESET = "\033[0m"
+
+BANNER = f"""
+{NEON_MAGENTA}╔════════════════════════════════════════════╗
+║        CAN ENGINE :: TECHNO-THRILLER        ║
+╚════════════════════════════════════════════╝{RESET}
+"""
+
+
+def neon(text: str, color: str = NEON_CYAN) -> str:
+    """Wrap text in eye-searing ANSI colors."""
+    return f"{color}{text}{RESET}"
+
 
 # ---------------------------------------------------------------------------
 # CAN engine implementation
@@ -286,20 +303,24 @@ def main() -> None:
 
     args = parser.parse_args()
     engine = CANEngine()
+    print(BANNER)
 
     if args.cmd == "parse":
+        print(neon(">> INITIATING LOG PARSE SEQUENCE <<", NEON_MAGENTA))
         frames = engine.parse_log(args.log)
         for f in frames[:10]:
             decoded = engine.decode_obd_pid(f)
             if decoded:
-                print(f"ts {f.timestamp_ms} id 0x{f.can_id:03X}: {decoded}")
+                print(neon(f"[{f.timestamp_ms}] 0x{f.can_id:03X} :: {decoded}", NEON_GREEN))
     elif args.cmd == "builddbc":
+        print(neon(">> ASSEMBLING DBC MATRIX <<", NEON_MAGENTA))
         frames = engine.parse_log(args.log)
         engine.build_dbc(frames, args.output)
-        print(f"Wrote DBC to {args.output}")
+        print(neon(f"DBC WRITTEN TO {args.output}", NEON_GREEN))
     elif args.cmd == "serial":
         engine.log_serial_frames(args.port, args.baudrate)
     elif args.cmd == "send":
+        print(neon(">> TRANSMISSION COMMENCING <<", NEON_MAGENTA))
         engine.load_dbc(args.dbc)
         signal_values = {}
         for pair in args.signals:
@@ -308,6 +329,7 @@ def main() -> None:
             name, val = pair.split("=", 1)
             signal_values[name] = float(val)
         engine.send_command(args.message, args.channel, **signal_values)
+        print(neon(">> TRANSMISSION COMPLETE <<", NEON_GREEN))
     else:
         parser.print_help()
 
