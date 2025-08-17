@@ -31,6 +31,10 @@ All of the helper Python scripts have been consolidated into
 stream frames from a serial port and even transmit commands using a CAN
 interface.
 
+The console interface embraces a retro techno‑thriller aesthetic with
+ANSI neon coloring, ASCII art banners, progress bars and time‑stamped log
+lines to make every session feel like a scene from *WarGames*.
+
 Typical usage:
 
 ```bash
