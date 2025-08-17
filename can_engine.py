@@ -21,7 +21,7 @@ import csv
 import threading
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Optional
 
 try:
     import serial  # type: ignore
@@ -47,10 +47,10 @@ class CANFrame:
     timestamp_ms: int
     can_id: int
     dlc: int
-    data: List[int]
+    data: list[int]
 
 
-PID_NAMES: Dict[int, str] = {
+PID_NAMES: dict[int, str] = {
     0x0C: "ENGINE_RPM",
     0x0D: "VEHICLE_SPEED",
     0x11: "THROTTLE_POSITION",
@@ -58,7 +58,7 @@ PID_NAMES: Dict[int, str] = {
 }
 
 # Known OBD-II PID signal definitions: pid -> (name, length_bits, factor, offset, unit)
-PID_SIGNALS: Dict[int, tuple[str, int, float, float, str]] = {
+PID_SIGNALS: dict[int, tuple[str, int, float, float, str]] = {
     0x0C: ("EngineRPM", 16, 0.25, 0.0, "rpm"),
     0x0D: ("VehicleSpeed", 8, 1.0, 0.0, "km/h"),
     0x11: ("ThrottlePosition", 8, 100.0 / 255.0, 0.0, "%"),
@@ -66,7 +66,7 @@ PID_SIGNALS: Dict[int, tuple[str, int, float, float, str]] = {
 }
 
 # Known message names for specific CAN IDs
-MESSAGE_NAMES: Dict[int, str] = {
+MESSAGE_NAMES: dict[int, str] = {
     0x5F1: "DOOR_UNLOCK_CMD",
     0x5FB: "DOOR_LOCK_CMD",
 }
@@ -179,15 +179,15 @@ class CANEngine:
         self.db = None  # type: ignore
 
     # -- Log parsing -----------------------------------------------------
-    def parse_log(self, path: str) -> List[CANFrame]:
-        frames: List[CANFrame] = []
+    def parse_log(self, path: str) -> list[CANFrame]:
+        frames: list[CANFrame] = []
         with open(path, newline="") as f:
             reader = csv.reader(f)
             for row in reader:
                 if not row or row[0] == "timestamp_ms":
                     continue
                 ts = int(row[0])
-                can_id = int(row[1], 16) if row[1].startswith("0x") else int(row[1], 16)
+                can_id = int(row[1], 16)
                 dlc = int(row[2])
                 data_bytes = [int(byte, 16) for byte in row[3].split()]
                 frames.append(CANFrame(ts, can_id, dlc, data_bytes))
@@ -214,12 +214,12 @@ class CANEngine:
         return None
 
     # -- DBC building ----------------------------------------------------
-    def build_dbc(self, frames: List[CANFrame], output_path: str) -> None:
+    def build_dbc(self, frames: list[CANFrame], output_path: str) -> None:
         from collections import defaultdict
         import os
         import re
 
-        frames_by_id: Dict[int, List[CANFrame]] = defaultdict(list)
+        frames_by_id: dict[int, list[CANFrame]] = defaultdict(list)
         for f in frames:
             frames_by_id[f.can_id].append(f)
 
