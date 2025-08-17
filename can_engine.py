@@ -367,8 +367,8 @@ class CANEngine:
             msg = "\n".join(
                 [
                     "╔════════════════════════════════════════════════════════════╗",
-                    "║  python-can module not detected!                          ║",
-                    "║  Install it with: pip install python-can                  ║",
+                    "║  python-can module not detected!                           ║",
+                    "║  Install it with: pip install python-can                   ║",
                     "╚════════════════════════════════════════════════════════════╝",
                 ]
             )
