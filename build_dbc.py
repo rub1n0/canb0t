@@ -27,6 +27,8 @@ PID_SIGNALS: Dict[int, Tuple[str, int, float, float, str]] = {
 MESSAGE_NAMES: Dict[int, str] = {
     # Door unlock command observed during capture
     0x5F1: "DOOR_UNLOCK_CMD",
+    # Door lock command observed during capture
+    0x5FB: "DOOR_LOCK_CMD",
 }
 
 
