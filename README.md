@@ -25,6 +25,18 @@ timestamp_ms,id,dlc,data
 
 Each line contains the millisecond timestamp, CAN identifier, data length code, and hex data bytes.
 
+## PC Serial Logging
+The `serial_logger.py` script logs CAN frames sent over the Arduino's serial
+connection directly to your computer. By default it listens on `COM3` at
+115200 baud and appends frames to `CANLOG.CSV` in the repository. Run it with:
+
+```
+python serial_logger.py
+```
+
+When a frame contains a response to a known OBD-II PID, the script records the
+PID name (e.g. `ENGINE_RPM`) instead of the numeric identifier.
+
 ## DBC Generation
 The `build_dbc.py` helper analyzes a captured CAN log and produces a basic DBC file. The script groups frames by identifier and creates placeholder signals for each byte. When it detects responses to known OBD-II PIDs, it emits named signals with proper scaling and units.
 
