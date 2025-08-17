@@ -24,3 +24,12 @@ timestamp_ms,id,dlc,data
 ```
 
 Each line contains the millisecond timestamp, CAN identifier, data length code, and hex data bytes.
+
+## DBC Generation
+The `build_dbc.py` helper analyzes a captured CAN log and produces a basic DBC file. The script groups frames by identifier and creates placeholder signals for each byte. When it detects responses to known OBD-II PIDs, it emits named signals with proper scaling and units.
+
+```
+python build_dbc.py CANLOG.CSV output.dbc
+```
+
+The resulting `output.dbc` can be loaded into common CAN analysis tools for further exploration.
