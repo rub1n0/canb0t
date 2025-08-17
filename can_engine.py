@@ -78,9 +78,13 @@ NEON_GREEN = "\033[92m"
 RESET = "\033[0m"
 
 BANNER = f"""
-{NEON_MAGENTA}╔════════════════════════════════════════════╗
-║        CAN ENGINE :: TECHNO-THRILLER        ║
-╚════════════════════════════════════════════╝{RESET}
+{NEON_MAGENTA}
+  ____   _    _   _ ____   ___ _____ 
+ / ___| / \\  | \\ | | __ ) / _ \\_   _|
+| |    / _ \\ |  \\| |  _ \\| | | || |  
+| |___/ ___ \\| |\\  | |_) | |_| || |  
+ \\____/_/   \\_\\_| \\_|____/ \\___/ |_|
+{RESET}
 """
 
 
@@ -274,6 +278,34 @@ class CANEngine:
         bus = can.interface.Bus(channel=channel, bustype="socketcan")
         bus.send(can.Message(arbitration_id=msg.frame_id, data=data))
 
+    def send_pid_request(self, pid: int, channel: str = "can0") -> None:
+        """Send a simple OBD-II PID request frame."""
+        if can is None:
+            raise RuntimeError("python-can is required to send PID requests")
+        data = bytes([0x02, 0x01, pid, 0x00, 0x00, 0x00, 0x00, 0x00])
+        bus = can.interface.Bus(channel=channel, bustype="socketcan")
+        bus.send(can.Message(arbitration_id=0x7DF, data=data))
+
+    def interactive_menu(self, channel: str = "can0") -> None:
+        """Interactive menu allowing the user to send PID requests."""
+        if can is None:
+            raise RuntimeError("python-can is required to send PID requests")
+        while True:
+            print(neon("\nSelect PID to request:", NEON_MAGENTA))
+            for idx, (pid, name) in enumerate(PID_NAMES.items(), start=1):
+                print(neon(f"{idx}. {name} (0x{pid:02X})"))
+            print(neon("0. EXIT", NEON_MAGENTA))
+            choice = input("[PID] > ")
+            if choice == "0":
+                break
+            try:
+                pid = list(PID_NAMES.keys())[int(choice) - 1]
+            except (ValueError, IndexError):
+                print(neon("Invalid selection", NEON_MAGENTA))
+                continue
+            self.send_pid_request(pid, channel)
+            print(neon(f"Sent request for {PID_NAMES[pid]}", NEON_GREEN))
+
 
 # ---------------------------------------------------------------------------
 # CLI entry point
@@ -300,6 +332,9 @@ def main() -> None:
     p_send.add_argument("message")
     p_send.add_argument("signals", nargs="*", help="Signal=value pairs")
     p_send.add_argument("--channel", default="can0")
+
+    p_menu = sub.add_parser("menu", help="Interactive menu to send PID requests")
+    p_menu.add_argument("--channel", default="can0")
 
     args = parser.parse_args()
     engine = CANEngine()
@@ -330,6 +365,8 @@ def main() -> None:
             signal_values[name] = float(val)
         engine.send_command(args.message, args.channel, **signal_values)
         print(neon(">> TRANSMISSION COMPLETE <<", NEON_GREEN))
+    elif args.cmd == "menu":
+        engine.interactive_menu(args.channel)
     else:
         parser.print_help()
 
