@@ -20,6 +20,7 @@ import argparse
 import csv
 import threading
 import time
+import socket
 from dataclasses import dataclass
 from typing import Optional
 
@@ -352,8 +353,9 @@ class CANEngine:
 
         msg = self.db.get_message_by_name(message)
         data = msg.encode(signals)
+        interface = "socketcan" if hasattr(socket, "CMSG_SPACE") else "virtual"
         try:
-            bus = can.interface.Bus(channel=channel, interface="socketcan")
+            bus = can.interface.Bus(channel=channel, interface=interface)
         except (OSError, NotImplementedError) as exc:
             system_alert(f"Failed to access CAN interface '{channel}': {exc}")
             return False
@@ -399,8 +401,9 @@ class CANEngine:
         if can is None:
             raise RuntimeError("python-can is required to send PID requests")
         data = bytes([0x02, 0x01, pid, 0x00, 0x00, 0x00, 0x00, 0x00])
+        interface = "socketcan" if hasattr(socket, "CMSG_SPACE") else "virtual"
         try:
-            bus = can.interface.Bus(channel=channel, interface="socketcan")
+            bus = can.interface.Bus(channel=channel, interface=interface)
         except (OSError, NotImplementedError) as exc:
             system_alert(f"Failed to access CAN interface '{channel}': {exc}")
             return False

@@ -52,6 +52,10 @@ python can_engine.py send output.dbc DOOR_UNLOCK_CMD --channel can0
 # omitting the message name will prompt for available messages and signals
 ```
 
+On platforms without native SocketCAN support (for example, Windows),
+the engine automatically falls back to python-can's virtual interface so
+commands can be encoded and tested without actual hardware.
+
 The generated `output.dbc` can still be used with common CAN analysis
 tools for further exploration.
 
