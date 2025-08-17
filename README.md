@@ -75,3 +75,42 @@ action or `0` to exit:
 5. **Interactive PID menu** – Opens a submenu listing common OBD‑II PIDs
    that can be requested repeatedly; choose `0` within this submenu to
    return to the main menu.
+
+### Examples
+
+#### Send Command From DBC
+
+The send command can be executed directly or through the interactive menu.
+
+```bash
+# Direct invocation specifying the message to transmit
+python can_engine.py send output.dbc DOOR_UNLOCK_CMD --channel can0
+
+# Let the utility prompt for the message and signal values
+python can_engine.py
+> 4
+DBC path: output.dbc
+Channel [can0]:
+Select message: 1) DOOR_UNLOCK_CMD
+SIGNAL DoorID [0-1]: 1
+SIGNAL Toggle   [0-1]: 1
+TRANSMISSION COMPLETE
+```
+
+#### Interactive PID Menu
+
+Launch the main program and choose the interactive PID option to request
+repeated OBD‑II queries.
+
+```bash
+python can_engine.py
+> 5
+Channel [can0]:
+1) Engine RPM
+2) Vehicle Speed
+3) Throttle Position
+> 1
+ENGINE RPM: 3120
+```
+
+Entering `0` in the PID submenu returns to the main menu when finished.
