@@ -10,6 +10,14 @@ PID_SIGNALS: Dict[int, Tuple[str, int, float, float, str]] = {
     0x0D: ("VehicleSpeed", 8, 1.0, 0.0, "km/h"),
     0x11: ("ThrottlePosition", 8, 100.0 / 255.0, 0.0, "%"),
     0x05: ("CoolantTemp", 8, 1.0, -40.0, "°C"),
+    0x04: ("EngineLoad", 8, 100.0 / 255.0, 0.0, "%"),
+    0x0F: ("IntakeAirTemp", 8, 1.0, -40.0, "°C"),
+    0x10: ("MAFAirFlow", 16, 0.01, 0.0, "g/s"),
+    0x1F: ("RunTimeSinceStart", 16, 1.0, 0.0, "s"),
+    0x2F: ("FuelLevel", 8, 100.0 / 255.0, 0.0, "%"),
+    0x42: ("ControlModuleVoltage", 16, 0.001, 0.0, "V"),
+    0x46: ("AmbientAirTemp", 8, 1.0, -40.0, "°C"),
+    0x5C: ("EngineOilTemp", 8, 1.0, -40.0, "°C"),
 }
 
 
