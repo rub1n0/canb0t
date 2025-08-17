@@ -340,8 +340,11 @@ class CANEngine:
             raise RuntimeError("cantools is required to load DBC files")
         self.db = cantools.database.load_file(path)
 
-    def send_command(self, message: str, channel: str = "can0", **signals: float) -> None:
-        """Encode and send a command defined in the loaded DBC."""
+    def send_command(self, message: str, channel: str = "can0", **signals: float) -> bool:
+        """Encode and transmit a command defined in the loaded DBC.
+
+        Returns ``True`` if the frame was sent successfully, otherwise ``False``.
+        """
         if cantools is None or can is None:
             raise RuntimeError("cantools and python-can are required to send commands")
         if self.db is None:
@@ -349,8 +352,17 @@ class CANEngine:
 
         msg = self.db.get_message_by_name(message)
         data = msg.encode(signals)
-        bus = can.interface.Bus(channel=channel, bustype="socketcan")
-        bus.send(can.Message(arbitration_id=msg.frame_id, data=data))
+        try:
+            bus = can.interface.Bus(channel=channel, interface="socketcan")
+        except (OSError, NotImplementedError) as exc:
+            system_alert(f"Failed to access CAN interface '{channel}': {exc}")
+            return False
+        try:
+            bus.send(can.Message(arbitration_id=msg.frame_id, data=data))
+        except can.CanError as exc:
+            system_alert(f"Failed to send CAN message: {exc}")
+            return False
+        return True
 
     def interactive_send_command(self, channel: str = "can0") -> bool:
         """Interactively choose a message and signals to transmit."""
@@ -377,16 +389,27 @@ class CANEngine:
                     signals[sig.name] = float(val_str)
                 except ValueError:
                     system_alert(f"Invalid value for {sig.name}")
-        self.send_command(chosen.name, channel, **signals)
-        return True
+        return self.send_command(chosen.name, channel, **signals)
 
-    def send_pid_request(self, pid: int, channel: str = "can0") -> None:
-        """Send a simple OBD-II PID request frame."""
+    def send_pid_request(self, pid: int, channel: str = "can0") -> bool:
+        """Send a simple OBD-II PID request frame.
+
+        Returns ``True`` if the request was transmitted successfully.
+        """
         if can is None:
             raise RuntimeError("python-can is required to send PID requests")
         data = bytes([0x02, 0x01, pid, 0x00, 0x00, 0x00, 0x00, 0x00])
-        bus = can.interface.Bus(channel=channel, bustype="socketcan")
-        bus.send(can.Message(arbitration_id=0x7DF, data=data))
+        try:
+            bus = can.interface.Bus(channel=channel, interface="socketcan")
+        except (OSError, NotImplementedError) as exc:
+            system_alert(f"Failed to access CAN interface '{channel}': {exc}")
+            return False
+        try:
+            bus.send(can.Message(arbitration_id=0x7DF, data=data))
+        except can.CanError as exc:
+            system_alert(f"Failed to send CAN message: {exc}")
+            return False
+        return True
 
     def interactive_menu(self, channel: str = "can0") -> None:
         """Interactive menu allowing the user to send PID requests."""
@@ -416,8 +439,8 @@ class CANEngine:
             except (ValueError, IndexError):
                 system_alert("Invalid selection")
                 continue
-            self.send_pid_request(pid, channel)
-            log_line(f"Sent request for {PID_NAMES[pid]}")
+            if self.send_pid_request(pid, channel):
+                log_line(f"Sent request for {PID_NAMES[pid]}")
 
 
     def main_menu(self) -> None:
