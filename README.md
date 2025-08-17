@@ -42,13 +42,13 @@ Typical usage:
 python can_engine.py parse CANLOG.CSV
 
 # Build or extend a DBC file from a log
-python can_engine.py builddbc CANLOG.CSV output.dbc
+python can_engine.py builddbc CANLOG.CSV landrover2008lr3.dbc
 
-# Log frames arriving on a serial port
-python can_engine.py serial COM3
+# Log frames arriving on the default serial port
+python can_engine.py serial
 
 # Send a command defined in the DBC (message optional)
-python can_engine.py send output.dbc DOOR_UNLOCK_CMD --channel can0
+python can_engine.py send landrover2008lr3.dbc DOOR_UNLOCK_CMD --channel can0
 # omitting the message name will prompt for available messages and signals
 ```
 
@@ -56,7 +56,7 @@ On platforms without native SocketCAN support (for example, Windows),
 the engine automatically falls back to python-can's virtual interface so
 commands can be encoded and tested without actual hardware.
 
-The generated `output.dbc` can still be used with common CAN analysis
+The generated `landrover2008lr3.dbc` can still be used with common CAN analysis
 tools for further exploration.
 
 Running `python can_engine.py` with no arguments now launches an
@@ -71,8 +71,8 @@ action or `0` to exit:
    frames and prints the first few interpreted OBD‑II signals.
 2. **Build DBC from log** – Requests a log file and destination path, then
    constructs a DBC file describing observed frames.
-3. **Log frames from serial port** – Asks for the serial port and optional
-   baud rate to record live traffic to the console.
+3. **Log frames from serial port** – Asks for the serial port (defaults to
+   COM3) and optional baud rate to record live traffic to the console.
 4. **Send command from DBC** – Loads a specified DBC, presents the available
    message names for selection and prompts for each signal value before
    transmitting the command on a chosen channel.
@@ -88,12 +88,12 @@ The send command can be executed directly or through the interactive menu.
 
 ```bash
 # Direct invocation specifying the message to transmit
-python can_engine.py send output.dbc DOOR_UNLOCK_CMD --channel can0
+python can_engine.py send landrover2008lr3.dbc DOOR_UNLOCK_CMD --channel can0
 
 # Let the utility prompt for the message and signal values
 python can_engine.py
 > 4
-DBC path: output.dbc
+DBC path: landrover2008lr3.dbc
 Channel [can0]:
 Select message: 1) DOOR_UNLOCK_CMD
 SIGNAL DoorID [0-1]: 1

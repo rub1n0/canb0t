@@ -11,7 +11,7 @@ This module combines the previous standalone scripts into a single
 
 Example:
     engine = CANEngine()
-    engine.load_dbc('output.dbc')
+    engine.load_dbc('landrover2008lr3.dbc')
     engine.send_command('DOOR_UNLOCK_CMD')
 """
 from __future__ import annotations
@@ -277,11 +277,17 @@ class CANEngine:
                 dbc.write("\n")
 
     # -- Serial logging --------------------------------------------------
-    def log_serial_frames(self, port: str, baudrate: int) -> None:
+    def log_serial_frames(self, port: str = "COM3", baudrate: int = 115200) -> None:
         if serial is None:
             raise RuntimeError("pyserial is not installed")
 
         import re
+        import sys
+
+        print_banner("SERIAL LOGGER")
+        log_line(f"Connecting to {port} @ {baudrate}...", NEON_CYAN)
+        log_line("Controls: [p]ause [r]esume [q]uit", NEON_MAGENTA)
+
         pattern = re.compile(r"ID: 0x([0-9A-F]+)\s+DLC:(\d+)\s+Data:(.*)")
 
         paused = False
@@ -289,20 +295,18 @@ class CANEngine:
 
         def control_loop() -> None:
             nonlocal paused, stop
-            print("Type 'p' then Enter to pause, 'r' to resume, or 'q' to quit.")
             for line in sys.stdin:
                 cmd = line.strip().lower()
                 if cmd == "p":
                     paused = True
-                    print("Logging paused. Type 'r' to resume.")
+                    log_line("Logging paused. Type 'r' to resume.", NEON_MAGENTA)
                 elif cmd == "r":
                     paused = False
-                    print("Logging resumed.")
+                    log_line("Logging resumed.", NEON_GREEN)
                 elif cmd == "q":
                     stop = True
+                    log_line("Stopping logging...", NEON_MAGENTA)
                     break
-
-        import sys
 
         threading.Thread(target=control_loop, daemon=True).start()
 
@@ -335,6 +339,7 @@ class CANEngine:
                     log.flush()
             except KeyboardInterrupt:
                 pass
+        log_line("Serial logging terminated.", NEON_MAGENTA)
 
     # -- DBC loading and command sending ---------------------------------
     def load_dbc(self, path: str) -> None:
@@ -477,7 +482,7 @@ class CANEngine:
                 self.build_dbc(frames, output)
                 log_line(f"DBC WRITTEN TO {output}")
             elif choice == "3":
-                port = input("Serial port: ")
+                port = input("Serial port [COM3]: ") or "COM3"
                 try:
                     baud = int(input("Baudrate [115200]: ") or "115200")
                 except ValueError:
@@ -516,8 +521,8 @@ def main() -> None:
     p_build.add_argument("output")
 
     p_log = sub.add_parser("serial", help="Log frames from serial port")
-    p_log.add_argument("port")
-    p_log.add_argument("baudrate", type=int, default=115200)
+    p_log.add_argument("port", nargs="?", default="COM3")
+    p_log.add_argument("baudrate", type=int, nargs="?", default=115200)
 
     p_send = sub.add_parser("send", help="Send command from DBC")
     p_send.add_argument("dbc")
