@@ -25,23 +25,27 @@ timestamp_ms,id,dlc,data
 
 Each line contains the millisecond timestamp, CAN identifier, data length code, and hex data bytes.
 
-## PC Serial Logging
-The `serial_logger.py` script logs CAN frames sent over the Arduino's serial
-connection directly to your computer. By default it listens on `COM3` at
-115200 baud and appends frames to `CANLOG.CSV` in the repository. Run it with:
+## Master CAN Engine
+All of the helper Python scripts have been consolidated into
+`can_engine.py`, a single utility that can parse logs, build a DBC file,
+stream frames from a serial port and even transmit commands using a CAN
+interface.
 
+Typical usage:
+
+```bash
+# Parse and display decoded OBD-II frames from a log
+python can_engine.py parse CANLOG.CSV
+
+# Build or extend a DBC file from a log
+python can_engine.py builddbc CANLOG.CSV output.dbc
+
+# Log frames arriving on a serial port
+python can_engine.py serial COM3
+
+# Send a command defined in the DBC
+python can_engine.py send output.dbc DOOR_UNLOCK_CMD --channel can0
 ```
-python serial_logger.py
-```
 
-When a frame contains a response to a known OBD-II PID, the script records the
-PID name (e.g. `ENGINE_RPM`) instead of the numeric identifier.
-
-## DBC Generation
-The `build_dbc.py` helper analyzes a captured CAN log and produces a basic DBC file. The script groups frames by identifier and creates placeholder signals for each byte. When it detects responses to known OBD-II PIDs, it emits named signals with proper scaling and units.
-
-```
-python build_dbc.py CANLOG.CSV output.dbc
-```
-
-The resulting `output.dbc` can be loaded into common CAN analysis tools for further exploration.
+The generated `output.dbc` can still be used with common CAN analysis
+tools for further exploration.
