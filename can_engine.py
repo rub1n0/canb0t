@@ -352,6 +352,34 @@ class CANEngine:
         bus = can.interface.Bus(channel=channel, bustype="socketcan")
         bus.send(can.Message(arbitration_id=msg.frame_id, data=data))
 
+    def interactive_send_command(self, channel: str = "can0") -> bool:
+        """Interactively choose a message and signals to transmit."""
+        if self.db is None:
+            system_alert("DBC not loaded")
+            return False
+        print_divider()
+        print(neon("Select message:", NEON_MAGENTA))
+        messages = self.db.messages
+        for idx, msg in enumerate(messages, start=1):
+            print(neon(f"{idx}. {msg.name}"))
+        try:
+            msg_idx = int(input("Message number: "))
+            chosen = messages[msg_idx - 1]
+        except (ValueError, IndexError):
+            system_alert("Invalid selection")
+            return False
+        signals: dict[str, float] = {}
+        for sig in chosen.signals:
+            default = getattr(sig, "initial", 0)
+            val_str = input(f"{sig.name} [{default}]: ")
+            if val_str:
+                try:
+                    signals[sig.name] = float(val_str)
+                except ValueError:
+                    system_alert(f"Invalid value for {sig.name}")
+        self.send_command(chosen.name, channel, **signals)
+        return True
+
     def send_pid_request(self, pid: int, channel: str = "can0") -> None:
         """Send a simple OBD-II PID request frame."""
         if can is None:
@@ -432,21 +460,9 @@ class CANEngine:
             elif choice == "4":
                 dbc = input("DBC path: ")
                 self.load_dbc(dbc)
-                message = input("Message name: ")
-                signal_pairs = input(
-                    "Signals (name=value space-separated): "
-                ).split()
-                signals: dict[str, float] = {}
-                for pair in signal_pairs:
-                    if "=" in pair:
-                        name, val = pair.split("=", 1)
-                        try:
-                            signals[name] = float(val)
-                        except ValueError:
-                            system_alert(f"Invalid value for {name}")
                 channel = input("Channel [can0]: ") or "can0"
-                self.send_command(message, channel, **signals)
-                log_line("TRANSMISSION COMPLETE", NEON_GREEN)
+                if self.interactive_send_command(channel):
+                    log_line("TRANSMISSION COMPLETE", NEON_GREEN)
             elif choice == "5":
                 channel = input("Channel [can0]: ") or "can0"
                 self.interactive_menu(channel)
@@ -478,7 +494,7 @@ def main() -> None:
 
     p_send = sub.add_parser("send", help="Send command from DBC")
     p_send.add_argument("dbc")
-    p_send.add_argument("message")
+    p_send.add_argument("message", nargs="?")
     p_send.add_argument("signals", nargs="*", help="Signal=value pairs")
     p_send.add_argument("--channel", default="can0")
 
@@ -511,14 +527,18 @@ def main() -> None:
     elif args.cmd == "send":
         print_banner("TRANSMISSION")
         engine.load_dbc(args.dbc)
-        signal_values = {}
-        for pair in args.signals:
-            if "=" not in pair:
-                continue
-            name, val = pair.split("=", 1)
-            signal_values[name] = float(val)
-        engine.send_command(args.message, args.channel, **signal_values)
-        log_line("TRANSMISSION COMPLETE", NEON_GREEN)
+        if args.message:
+            signal_values = {}
+            for pair in args.signals:
+                if "=" not in pair:
+                    continue
+                name, val = pair.split("=", 1)
+                signal_values[name] = float(val)
+            engine.send_command(args.message, args.channel, **signal_values)
+            log_line("TRANSMISSION COMPLETE", NEON_GREEN)
+        else:
+            if engine.interactive_send_command(args.channel):
+                log_line("TRANSMISSION COMPLETE", NEON_GREEN)
     elif args.cmd == "menu":
         engine.interactive_menu(args.channel)
     else:
