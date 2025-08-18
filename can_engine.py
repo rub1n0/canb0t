@@ -198,21 +198,21 @@ class CANEngine:
     def decode_obd_pid(self, frame: CANFrame) -> Optional[str]:
         if not frame.data:
             return None
-        if frame.data[0] == 0x41 and len(frame.data) >= 3:
-            pid = frame.data[1]
-            if pid == 0x0C and len(frame.data) >= 4:
-                rpm = ((frame.data[2] * 256) + frame.data[3]) / 4
+        if len(frame.data) >= 3 and frame.data[1] == 0x41:
+            pid = frame.data[2]
+            if pid == 0x0C and len(frame.data) >= 5:
+                rpm = ((frame.data[3] * 256) + frame.data[4]) / 4
                 return f"Engine RPM: {rpm}"
-            if pid == 0x0D and len(frame.data) >= 3:
-                speed = frame.data[2]
+            if pid == 0x0D and len(frame.data) >= 4:
+                speed = frame.data[3]
                 return f"Vehicle Speed: {speed} km/h"
-            if pid == 0x11 and len(frame.data) >= 3:
-                throttle = frame.data[2] * 100 / 255
+            if pid == 0x11 and len(frame.data) >= 4:
+                throttle = frame.data[3] * 100 / 255
                 return f"Throttle Position: {throttle:.1f}%"
-            if pid == 0x05 and len(frame.data) >= 3:
-                temp = frame.data[2] - 40
+            if pid == 0x05 and len(frame.data) >= 4:
+                temp = frame.data[3] - 40
                 return f"Coolant Temp: {temp} °C"
-            return f"PID 0x{pid:02X} data: {' '.join(f'{b:02X}' for b in frame.data[2:])}"
+            return f"PID 0x{pid:02X} data: {' '.join(f'{b:02X}' for b in frame.data[3:])}"
         return None
 
     # -- DBC building ----------------------------------------------------
@@ -251,14 +251,19 @@ class CANEngine:
                 name = MESSAGE_NAMES.get(can_id, f"MSG_{can_id:03X}")
                 dbc.write(f"BO_ {can_id} {name}: {dlc} Vector__XXX\n")
 
-                pids = {f.data[1] for f in msgs if len(f.data) >= 2 and f.data[0] == 0x41}
+                pids = {
+                    f.data[2]
+                    for f in msgs
+                    if len(f.data) >= 3 and f.data[1] == 0x41
+                }
                 if pids:
-                    dbc.write(" SG_ Service : 0|8@1+ (1,0) [0|255] \"\" Vector__XXX\n")
-                    dbc.write(" SG_ PID M : 8|8@1+ (1,0) [0|255] \"\" Vector__XXX\n")
+                    dbc.write(" SG_ Len : 0|8@1+ (1,0) [0|255] \"\" Vector__XXX\n")
+                    dbc.write(" SG_ Service : 8|8@1+ (1,0) [0|255] \"\" Vector__XXX\n")
+                    dbc.write(" SG_ PID M : 16|8@1+ (1,0) [0|255] \"\" Vector__XXX\n")
                     for pid in sorted(pids):
                         if pid in PID_SIGNALS:
                             name, size, factor, offset, unit = PID_SIGNALS[pid]
-                            start_bit = 16
+                            start_bit = 24
                             max_raw = (1 << size) - 1
                             min_val = offset
                             max_val = max_raw * factor + offset
@@ -267,7 +272,7 @@ class CANEngine:
                             )
                         else:
                             dbc.write(
-                                f" SG_ PID_{pid:02X} m{pid}: 16|8@1+ (1,0) [0|255] \"\" Vector__XXX\n"
+                                f" SG_ PID_{pid:02X} m{pid}: 24|8@1+ (1,0) [0|255] \"\" Vector__XXX\n"
                             )
                 else:
                     for i in range(dlc):
