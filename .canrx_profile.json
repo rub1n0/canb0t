@@ -1,0 +1,10 @@
+{
+  "port": "COM3",
+  "baud": 115200,
+  "output_csv": "canlog.csv",
+  "dbc_path": "lr3.dbc",
+  "input_csv": "canlog.csv",
+  "channel": "can0",
+  "rate": 1.0,
+  "loop": false
+}
