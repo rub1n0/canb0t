@@ -107,10 +107,21 @@ class CANb0t:
 
     def __init__(self) -> None:
         self.db = None  # type: ignore
+        self.captured_commands: dict[str, bytes] = {}
 
     # -- Serial logging -------------------------------------------------
-    def log_serial(self, port: str = "COM3", baudrate: int = 115200) -> None:
-        """Listen to ``port`` and append frames to ``CANLOG.CSV``."""
+    def log_serial(
+        self,
+        port: str = "COM3",
+        baudrate: int = 115200,
+        filter_ids: Optional[set[int]] = None,
+    ) -> None:
+        """Listen to ``port`` and append frames to ``CANLOG.CSV``.
+
+        If ``filter_ids`` is provided only frames with matching identifiers are
+        processed.  Any recognised messages have their raw bytes stored so they
+        can be reissued later via :meth:`send_command`.
+        """
 
         if serial is None:
             raise RuntimeError("pyserial not installed")
@@ -156,13 +167,21 @@ class CANb0t:
                 if not m:
                     continue
                 ts_ms = int(time.time() * 1000)
-                can_id = m.group(1)
+                frame_id = int(m.group(1), 16)
+                if filter_ids and frame_id not in filter_ids:
+                    continue
                 dlc = int(m.group(2))
                 data = [int(b, 16) for b in m.group(3).strip().split() if b]
                 log.write(
-                    f"{ts_ms},{can_id},{dlc},{' '.join(f'{b:02X}' for b in data)}\n"
+                    f"{ts_ms},{frame_id:03X},{dlc},{' '.join(f'{b:02X}' for b in data)}\n"
                 )
                 log.flush()
+                if self.db is not None:
+                    try:
+                        msg = self.db.get_message_by_frame_id(frame_id)
+                        self.captured_commands[msg.name] = bytes(data)
+                    except Exception:
+                        pass
 
         log_line("Serial logging terminated", NEON_MAGENTA)
 
@@ -178,7 +197,11 @@ class CANb0t:
         if can is None:
             raise RuntimeError("python-can required to send frames")
         msg = self.db.get_message_by_name(message)
-        data = msg.encode(signals)
+        if not signals and message in self.captured_commands:
+            data = self.captured_commands[message]
+        else:
+            data = msg.encode(signals)
+            self.captured_commands[message] = data
         iface = "socketcan" if hasattr(socket, "CMSG_SPACE") else "virtual"
         try:
             with can.interface.Bus(channel=channel, interface=iface) as bus:
@@ -316,6 +339,7 @@ class CANb0t:
             print(neon("1. Log frames from serial port"))
             print(neon("2. Send command from DBC"))
             print(neon("3. Interactive PID console"))
+            print(neon("4. Filter serial traffic by message"))
             print(neon("0. EXIT", NEON_MAGENTA))
             choice = input("[CMD] > ")
             if choice == "1":
@@ -338,6 +362,32 @@ class CANb0t:
             elif choice == "3":
                 channel = input("Channel [can0]: ") or "can0"
                 self.pid_console(channel)
+            elif choice == "4":
+                if self.db is None:
+                    dbc = input("DBC path: ")
+                    try:
+                        self.load_dbc(dbc)
+                    except Exception as exc:
+                        system_alert(str(exc))
+                        continue
+                assert self.db is not None
+                messages = self.db.messages
+                print(neon("Select messages (comma separated):", NEON_MAGENTA))
+                for idx, msg in enumerate(messages, start=1):
+                    print(neon(f"{idx}. {msg.name} (0x{msg.frame_id:03X})"))
+                sel = input("[MSG] > ")
+                try:
+                    ids = {messages[int(i.strip()) - 1].frame_id for i in sel.split(',') if i.strip()}
+                except (ValueError, IndexError):
+                    system_alert("Invalid selection")
+                    continue
+                port = input("Serial port [COM3]: ") or "COM3"
+                try:
+                    baud = int(input("Baudrate [115200]: ") or "115200")
+                except ValueError:
+                    system_alert("Invalid baudrate")
+                    continue
+                self.log_serial(port, baud, filter_ids=ids)
             elif choice == "0":
                 break
             else:

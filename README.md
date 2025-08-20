@@ -28,15 +28,18 @@ Each line contains the millisecond timestamp, CAN identifier, data length code, 
 ## Python Utility – *CANb0t Rebooted*
 
 The Python helper has been rewritten from the ground up.  The new
-`can_engine.py` focuses on three core capabilities while retaining the neon
+`can_engine.py` focuses on a few core capabilities while retaining the neon
 console flair:
 
 1. **Serial logging** – stream frames from the Arduino logger and append
    them to `CANLOG.CSV` while the console offers pause/resume controls.
 2. **DBC command transmission** – load a DBC file and encode messages for
-   transmission over any python‑can compatible interface.
+   transmission over any python‑can compatible interface.  Any message sent
+   or observed can be stored so the exact bytes may be reissued later.
 3. **Interactive PID console** – issue OBD‑II PID requests from a menu and
    display decoded responses.
+4. **Filtered serial capture** – select messages from the loaded DBC and
+   log only matching frames while automatically caching their data bytes.
 
 When sending a message interactively, the helper now inspects `CANLOG.CSV`
 and prepopulates each signal with the most recently observed byte values so
@@ -56,7 +59,7 @@ python can_engine.py pid --channel can0
 ```
 
 Running `python can_engine.py` with no sub‑command displays a small menu
-offering the same three actions.
+offering the same actions.
 
 On platforms without native SocketCAN support (for example, Windows), the
 utility automatically falls back to python‑can's virtual interface so
