@@ -25,96 +25,35 @@ timestamp_ms,id,dlc,data
 
 Each line contains the millisecond timestamp, CAN identifier, data length code, and hex data bytes.
 
-## Master CAN Engine
-All of the helper Python scripts have been consolidated into
-`can_engine.py`, a single utility that can parse logs, build a DBC file,
-stream frames from a serial port and even transmit commands using a CAN
-interface.
+## Python Utility – *CANb0t Rebooted*
 
-The console interface embraces a retro techno‑thriller aesthetic with
-ANSI neon coloring, ASCII art banners, progress bars and time‑stamped log
-lines to make every session feel like a scene from *WarGames*.
+The Python helper has been rewritten from the ground up.  The new
+`can_engine.py` focuses on three core capabilities while retaining the neon
+console flair:
 
-Typical usage:
+1. **Serial logging** – stream frames from the Arduino logger and append
+   them to `CANLOG.CSV` while the console offers pause/resume controls.
+2. **DBC command transmission** – load a DBC file and encode messages for
+   transmission over any python‑can compatible interface.
+3. **Interactive PID console** – issue OBD‑II PID requests from a menu and
+   display decoded responses.
+
+Example invocations:
 
 ```bash
-# Parse and display decoded OBD-II frames from a log
-python can_engine.py parse CANLOG.CSV
-
-# Build or extend a DBC file from a log
-python can_engine.py builddbc CANLOG.CSV landrover2008lr3.dbc
-
 # Log frames arriving on the default serial port
 python can_engine.py serial
 
-# Send a command defined in the DBC (message optional)
-python can_engine.py send landrover2008lr3.dbc DOOR_UNLOCK_CMD --channel can0
-# omitting the message name will prompt for available messages and signals
+# Send a command defined in the DBC
+python can_engine.py send landrover2008lr3.dbc DOOR_UNLOCK_CMD --channel can0 DoorID=1 Toggle=1
+
+# Launch the interactive PID console
+python can_engine.py pid --channel can0
 ```
 
-On platforms without native SocketCAN support (for example, Windows),
-the engine automatically falls back to python-can's virtual interface so
+Running `python can_engine.py` with no sub‑command displays a small menu
+offering the same three actions.
+
+On platforms without native SocketCAN support (for example, Windows), the
+utility automatically falls back to python‑can's virtual interface so
 commands can be encoded and tested without actual hardware.
-
-The generated `landrover2008lr3.dbc` can still be used with common CAN analysis
-tools for further exploration.
-
-Running `python can_engine.py` with no arguments now launches an
-interactive menu allowing you to choose from the above functions.
-
-### Interactive Menu Items
-
-The main menu presents numbered options. Enter the number of the desired
-action or `0` to exit:
-
-1. **Parse CAN log** – Prompts for the path to a log file, decodes its
-   frames and prints the first few interpreted OBD‑II signals.
-2. **Build DBC from log** – Requests a log file and destination path, then
-   constructs a DBC file describing observed frames.
-3. **Log frames from serial port** – Asks for the serial port (defaults to
-   COM3) and optional baud rate to record live traffic to the console.
-4. **Send command from DBC** – Loads a specified DBC, presents the available
-   message names for selection and prompts for each signal value before
-   transmitting the command on a chosen channel.
-5. **Interactive PID menu** – Opens a submenu listing common OBD‑II PIDs
-   that can be requested repeatedly; choose `0` within this submenu to
-   return to the main menu.
-
-### Examples
-
-#### Send Command From DBC
-
-The send command can be executed directly or through the interactive menu.
-
-```bash
-# Direct invocation specifying the message to transmit
-python can_engine.py send landrover2008lr3.dbc DOOR_UNLOCK_CMD --channel can0
-
-# Let the utility prompt for the message and signal values
-python can_engine.py
-> 4
-DBC path: landrover2008lr3.dbc
-Channel [can0]:
-Select message: 1) DOOR_UNLOCK_CMD
-SIGNAL DoorID [0-1]: 1
-SIGNAL Toggle   [0-1]: 1
-TRANSMISSION COMPLETE
-```
-
-#### Interactive PID Menu
-
-Launch the main program and choose the interactive PID option to request
-repeated OBD‑II queries.
-
-```bash
-python can_engine.py
-> 5
-Channel [can0]:
-1) Engine RPM
-2) Vehicle Speed
-3) Throttle Position
-> 1
-ENGINE RPM: 3120
-```
-
-Entering `0` in the PID submenu returns to the main menu when finished.
