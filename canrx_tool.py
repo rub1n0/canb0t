@@ -562,22 +562,27 @@ def pid_console(cfg: Config) -> None:
         return
     input("Press Enter to send requests...")
     try:
-        bus = can.interface.Bus(channel=cfg.channel, bustype="socketcan")
+        bus = can.interface.Bus(channel=cfg.channel, interface="socketcan")
     except Exception:
         try:
-            bus = can.interface.Bus(bustype="virtual")
+            bus = can.interface.Bus(interface="virtual")
         except Exception:
             print("Unable to open CAN bus")
             return
 
     pids = [0x0C, 0x0D, 0x11, 0x05]
-    for pid in pids:
-        msg = can.Message(arbitration_id=0x7DF, data=[0x02, 0x01, pid, 0, 0, 0, 0, 0])
-        try:
-            bus.send(msg)
-            print(f"Requested PID 0x{pid:02X}")
-        except Exception:
-            pass
+    try:
+        for pid in pids:
+            msg = can.Message(
+                arbitration_id=0x7DF, data=[0x02, 0x01, pid, 0, 0, 0, 0, 0]
+            )
+            try:
+                bus.send(msg)
+                print(f"Requested PID 0x{pid:02X}")
+            except Exception:
+                pass
+    finally:
+        bus.shutdown()
     print("Done. Returning to menu.")
 
 
