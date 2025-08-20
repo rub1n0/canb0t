@@ -38,6 +38,10 @@ console flair:
 3. **Interactive PID console** – issue OBD‑II PID requests from a menu and
    display decoded responses.
 
+When sending a message interactively, the helper now inspects `CANLOG.CSV`
+and prepopulates each signal with the most recently observed byte values so
+common commands can be re‑issued quickly.
+
 Example invocations:
 
 ```bash
