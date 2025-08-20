@@ -206,6 +206,11 @@ class CANb0t:
         try:
             with can.interface.Bus(channel=channel, interface=iface) as bus:
                 bus.send(can.Message(arbitration_id=msg.frame_id, data=data))
+                formatted = " ".join(f"{b:02X}" for b in data)
+                log_line(
+                    f"Sent {message} (0x{msg.frame_id:03X}): {formatted}",
+                    NEON_CYAN,
+                )
         except Exception as exc:  # pragma: no cover - hardware dependant
             system_alert(f"Send failed: {exc}")
             return False
