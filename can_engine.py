@@ -1,36 +1,32 @@
-"""Master CAN bus decoding engine consolidating log parsing, DBC building,
-serial logging and command transmission.
+"""Neon drenched CAN bus utility.
 
-This module combines the previous standalone scripts into a single
-`CANEngine` class.  It can:
-* parse log files produced by the Arduino logger
-* summarise and decode OBD-II frames
-* build a DBC file from a log
-* log frames from a serial port
-* load the generated DBC and send commands based on it
+This rewrite distils the earlier experiments into a focused tool that can:
 
-Example:
-    engine = CANEngine()
-    engine.load_dbc('landrover2008lr3.dbc')
-    engine.send_command('DOOR_UNLOCK_CMD')
+* log frames arriving over a serial connection (typically from an Arduino)
+* transmit commands defined in a DBC file
+* interactively query common OBD‑II PIDs
+
+Everything is wrapped in loud ANSI colour to keep the retro cyber‑punk
+vibes alive.
 """
+
 from __future__ import annotations
 
 import argparse
-import csv
+import socket
 import threading
 import time
-import socket
 from dataclasses import dataclass
 from typing import Optional
-import os
 
-try:
+
+# Optional third‑party modules -------------------------------------------------
+try:  # pragma: no cover - optional dependency
     import serial  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
     serial = None  # type: ignore
 
-try:
+try:  # pragma: no cover - optional dependency
     import cantools  # type: ignore
     import can  # python-can
 except Exception:  # pragma: no cover - optional dependency
@@ -38,42 +34,7 @@ except Exception:  # pragma: no cover - optional dependency
     can = None  # type: ignore
 
 
-# ---------------------------------------------------------------------------
-# Data structures
-# ---------------------------------------------------------------------------
-
-@dataclass
-class CANFrame:
-    """Simple representation of a CAN frame."""
-
-    timestamp_ms: int
-    can_id: int
-    dlc: int
-    data: list[int]
-    os.system("cls" if os.name == "nt" else "clear")
-
-PID_NAMES: dict[int, str] = {
-    0x0C: "ENGINE_RPM",
-    0x0D: "VEHICLE_SPEED",
-    0x11: "THROTTLE_POSITION",
-    0x05: "COOLANT_TEMP",
-}
-
-# Known OBD-II PID signal definitions: pid -> (name, length_bits, factor, offset, unit)
-PID_SIGNALS: dict[int, tuple[str, int, float, float, str]] = {
-    0x0C: ("EngineRPM", 16, 0.25, 0.0, "rpm"),
-    0x0D: ("VehicleSpeed", 8, 1.0, 0.0, "km/h"),
-    0x11: ("ThrottlePosition", 8, 100.0 / 255.0, 0.0, "%"),
-    0x05: ("CoolantTemp", 8, 1.0, -40.0, "°C"),
-}
-
-# Known message names for specific CAN IDs
-MESSAGE_NAMES: dict[int, str] = {
-    0x5F1: "DOOR_UNLOCK_CMD",
-    0x5FB: "DOOR_LOCK_CMD",
-}
-
-# Neon-soaked console styling for that 1980's techno-thriller vibe
+# A splash of neon -------------------------------------------------------------
 NEON_MAGENTA = "\033[95m"
 NEON_CYAN = "\033[96m"
 NEON_GREEN = "\033[92m"
@@ -81,526 +42,312 @@ RESET = "\033[0m"
 
 BANNER = f"""
 {NEON_MAGENTA}
-   ███████╗ █████╗ ███╗   ██╗██████╗  ██████╗ ████████╗
-  ██╔═══██╝██╔══██╗████╗  ██║██╔══██╗██╔═══██╗╚══██╔══╝
-  ██║      ███████║██╔██╗ ██║██████╔╝██║   ██║   ██║   
-  ██║   ██╗██╔══██║██║╚██╗██║██╔══██╗██║   ██║   ██║   
-  ╚██████╔╝██║  ██║██║ ╚████║██████╔╝╚██████╔╝   ██║   
-   ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝  ╚═════╝    ╚═╝   
-              CANBUS LOGGER • codename: canb0t
+ ██████╗  █████╗ ███╗   ██╗██████╗  ██████╗ ████████╗
+██╔════╝ ██╔══██╗████╗  ██║██╔══██╗██╔═══██╗╚══██╔══╝
+██║  ███╗███████║██╔██╗ ██║██████╔╝██║   ██║   ██║   
+██║   ██║██╔══██║██║╚██╗██║██╔══██╗██║   ██║   ██║   
+╚██████╔╝██║  ██║██║ ╚████║██████╔╝╚██████╔╝   ██║   
+ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝  ╚═════╝    ╚═╝   
+            CANB0T • REBOOTED IN LIVING COLOUR
 {RESET}
 """
 
 
-def neon(text: str, color: str = NEON_CYAN) -> str:
-    """Wrap text in eye-searing ANSI colors."""
-    return f"{color}{text}{RESET}"
+def neon(text: str, colour: str = NEON_CYAN) -> str:
+    """Wrap ``text`` in ANSI colour codes."""
+
+    return f"{colour}{text}{RESET}"
 
 
-# -- Retro techno-thriller console helpers ---------------------------------
+def log_line(message: str, colour: str = NEON_GREEN) -> None:
+    """Emit a timestamped, colourised log line."""
 
-def print_divider() -> None:
-    """Print a neon divider line."""
-    print(neon("═" * 60, NEON_MAGENTA))
-
-
-def print_banner(text: str) -> None:
-    """Render `text` as an ASCII art banner if possible."""
-    try:
-        from pyfiglet import figlet_format  # type: ignore
-
-        banner = figlet_format(text, font="slant")
-        print(neon(banner, NEON_MAGENTA))
-    except Exception:
-        # Fallback: simple framed text
-        framed = f"// {text.upper()} //"
-        print_divider()
-        print(neon(framed.center(60), NEON_MAGENTA))
-        print_divider()
-
-
-def print_progress_bar(progress: float) -> None:
-    """Display a chunky progress bar."""
-    blocks = 20
-    filled = int(blocks * progress)
-    bar = "▓" * filled + "░" * (blocks - filled)
-    pct = int(progress * 100)
-    print(neon(f"[{bar}] {pct}%", NEON_CYAN))
+    stamp = time.strftime("%H:%M:%S")
+    print(neon(f"[LOG {stamp}] {message}", colour))
 
 
 def system_alert(message: str) -> None:
-    """Blare a system alert message."""
-    print(neon(f"[SYSTEM]: !!! {message.upper()} !!!", NEON_MAGENTA))
+    """Blare a warning message in glorious magenta."""
+
+    print(neon(f"[SYSTEM] {message}", NEON_MAGENTA))
 
 
-def log_line(message: str, color: str = NEON_GREEN) -> None:
-    """Emit a time-stamped log line."""
-    ts = time.strftime("%H:%M:%S")
-    print(neon(f"[LOG {ts}] {message}", color))
+def print_divider() -> None:
+    print(neon("═" * 60, NEON_MAGENTA))
 
 
-def glitch(text: str) -> str:
-    """Introduce a bit of retro terminal glitchiness."""
-    import random
+# CAN frame & PID definitions --------------------------------------------------
+@dataclass
+class CANFrame:
+    """Minimal representation of a CAN frame."""
 
-    glitched = []
-    for ch in text:
-        glitched.append(ch)
-        if random.random() < 0.1 and ch.isalpha():
-            glitched.append(ch)
-    return "".join(glitched)
-
-
-def pseudo_data_stream(lines: int = 3) -> None:
-    """Spew a stream of pseudo-random hex for dramatic effect."""
-    import random
-
-    for _ in range(lines):
-        chunk = " ".join(f"{random.randint(0,255):02X}" for _ in range(8))
-        log_line(chunk, NEON_CYAN)
+    timestamp_ms: int
+    can_id: int
+    dlc: int
+    data: list[int]
 
 
-def simulate_progress(task: str, steps: int = 3, delay: float = 0.3) -> None:
-    """Simulate an animated task with dot progress and final bar."""
-    for i in range(steps):
-        print(neon(f"{task}{'.' * (i % 3 + 1)}", NEON_CYAN), end="\r")
-        time.sleep(delay)
-    print(neon(f"{task}...", NEON_CYAN))
-    print_progress_bar(1.0)
+# pid -> (name, decode_fn)
+PID_MAP: dict[int, tuple[str, callable[[list[int]], str]]] = {
+    0x0C: (
+        "ENGINE_RPM",
+        lambda d: f"Engine RPM: {((d[0] << 8) + d[1]) / 4:.0f}",
+    ),
+    0x0D: ("VEHICLE_SPEED", lambda d: f"Vehicle Speed: {d[0]} km/h"),
+    0x11: (
+        "THROTTLE_POSITION",
+        lambda d: f"Throttle Position: {d[0] * 100 / 255:.1f}%",
+    ),
+    0x05: ("COOLANT_TEMP", lambda d: f"Coolant Temp: {d[0] - 40} °C"),
+}
 
 
-# ---------------------------------------------------------------------------
-# CAN engine implementation
-# ---------------------------------------------------------------------------
-
-
-class CANEngine:
-    """Master CAN bus decoding engine."""
+class CANb0t:
+    """All in one helper class."""
 
     def __init__(self) -> None:
         self.db = None  # type: ignore
 
-    # -- Log parsing -----------------------------------------------------
-    def parse_log(self, path: str) -> list[CANFrame]:
-        frames: list[CANFrame] = []
-        with open(path, newline="") as f:
-            reader = csv.reader(f)
-            for row in reader:
-                if not row or row[0] == "timestamp_ms":
-                    continue
-                ts = int(row[0])
-                can_id = int(row[1], 16)
-                dlc = int(row[2])
-                data_bytes = [int(byte, 16) for byte in row[3].split()]
-                frames.append(CANFrame(ts, can_id, dlc, data_bytes))
-        return frames
+    # -- Serial logging -------------------------------------------------
+    def log_serial(self, port: str = "COM3", baudrate: int = 115200) -> None:
+        """Listen to ``port`` and append frames to ``CANLOG.CSV``."""
 
-    def decode_obd_pid(self, frame: CANFrame) -> Optional[str]:
-        if not frame.data:
-            return None
-        if len(frame.data) >= 3 and frame.data[1] == 0x41:
-            pid = frame.data[2]
-            if pid == 0x0C and len(frame.data) >= 5:
-                rpm = ((frame.data[3] * 256) + frame.data[4]) / 4
-                return f"Engine RPM: {rpm}"
-            if pid == 0x0D and len(frame.data) >= 4:
-                speed = frame.data[3]
-                return f"Vehicle Speed: {speed} km/h"
-            if pid == 0x11 and len(frame.data) >= 4:
-                throttle = frame.data[3] * 100 / 255
-                return f"Throttle Position: {throttle:.1f}%"
-            if pid == 0x05 and len(frame.data) >= 4:
-                temp = frame.data[3] - 40
-                return f"Coolant Temp: {temp} °C"
-            return f"PID 0x{pid:02X} data: {' '.join(f'{b:02X}' for b in frame.data[3:])}"
-        return None
-
-    # -- DBC building ----------------------------------------------------
-    def build_dbc(self, frames: list[CANFrame], output_path: str) -> None:
-        from collections import defaultdict
-        import os
-        import re
-
-        frames_by_id: dict[int, list[CANFrame]] = defaultdict(list)
-        for f in frames:
-            frames_by_id[f.can_id].append(f)
-
-        existing_ids = set()
-        mode = "w"
-        if os.path.exists(output_path):
-            with open(output_path, "r") as dbc:
-                for line in dbc:
-                    m = re.match(r"^BO_\s+(\d+)\s+", line)
-                    if m:
-                        existing_ids.add(int(m.group(1)))
-            mode = "a"
-
-        with open(output_path, mode) as dbc:
-            if mode == "w":
-                dbc.write('VERSION "generated by CANEngine"\n\n')
-                dbc.write('NS_ :\n\n')
-                dbc.write('BS_:\n\n')
-                dbc.write('BU_: Vector__XXX\n\n')
-            else:
-                dbc.write("\n")
-
-            for can_id, msgs in sorted(frames_by_id.items()):
-                if can_id in existing_ids:
-                    continue
-                dlc = max(f.dlc for f in msgs)
-                name = MESSAGE_NAMES.get(can_id, f"MSG_{can_id:03X}")
-                dbc.write(f"BO_ {can_id} {name}: {dlc} Vector__XXX\n")
-
-                pids = {
-                    f.data[2]
-                    for f in msgs
-                    if len(f.data) >= 3 and f.data[1] == 0x41
-                }
-                if pids:
-                    dbc.write(" SG_ Len : 0|8@1+ (1,0) [0|255] \"\" Vector__XXX\n")
-                    dbc.write(" SG_ Service : 8|8@1+ (1,0) [0|255] \"\" Vector__XXX\n")
-                    dbc.write(" SG_ PID M : 16|8@1+ (1,0) [0|255] \"\" Vector__XXX\n")
-                    for pid in sorted(pids):
-                        if pid in PID_SIGNALS:
-                            name, size, factor, offset, unit = PID_SIGNALS[pid]
-                            start_bit = 24
-                            max_raw = (1 << size) - 1
-                            min_val = offset
-                            max_val = max_raw * factor + offset
-                            dbc.write(
-                                f" SG_ {name} m{pid}: {start_bit}|{size}@1+ ({factor},{offset}) [{min_val}|{max_val}] \"{unit}\" Vector__XXX\n"
-                            )
-                        else:
-                            dbc.write(
-                                f" SG_ PID_{pid:02X} m{pid}: 24|8@1+ (1,0) [0|255] \"\" Vector__XXX\n"
-                            )
-                else:
-                    for i in range(dlc):
-                        dbc.write(
-                            f" SG_ BYTE{i} : {i*8}|8@1+ (1,0) [0|255] \"\" Vector__XXX\n"
-                        )
-                dbc.write("\n")
-
-    # -- Serial logging --------------------------------------------------
-    def log_serial_frames(self, port: str = "COM3", baudrate: int = 115200) -> None:
         if serial is None:
-            raise RuntimeError("pyserial is not installed")
+            raise RuntimeError("pyserial not installed")
 
         import re
         import sys
 
-        print_banner("SERIAL LOGGER")
-        log_line(f"Connecting to {port} @ {baudrate}...", NEON_CYAN)
+        print_divider()
+        log_line(f"Connecting to {port} @ {baudrate}", NEON_CYAN)
         log_line("Controls: [p]ause [r]esume [q]uit", NEON_MAGENTA)
 
         pattern = re.compile(r"ID: 0x([0-9A-F]+)\s+DLC:(\d+)\s+Data:(.*)")
 
-        paused = False
         stop = False
+        paused = False
 
-        def control_loop() -> None:
-            nonlocal paused, stop
+        def control() -> None:
+            nonlocal stop, paused
             for line in sys.stdin:
                 cmd = line.strip().lower()
                 if cmd == "p":
                     paused = True
-                    log_line("Logging paused. Type 'r' to resume.", NEON_MAGENTA)
+                    log_line("Paused", NEON_MAGENTA)
                 elif cmd == "r":
                     paused = False
-                    log_line("Logging resumed.", NEON_GREEN)
+                    log_line("Resumed", NEON_GREEN)
                 elif cmd == "q":
                     stop = True
-                    log_line("Stopping logging...", NEON_MAGENTA)
+                    log_line("Stopping", NEON_MAGENTA)
                     break
 
-        threading.Thread(target=control_loop, daemon=True).start()
+        threading.Thread(target=control, daemon=True).start()
 
         with serial.Serial(port, baudrate, timeout=1) as ser, open("CANLOG.CSV", "a") as log:
             if log.tell() == 0:
                 log.write("timestamp_ms,id,dlc,data\n")
-            try:
-                while not stop:
-                    if paused:
-                        time.sleep(0.1)
-                        continue
-                    line = ser.readline().decode("ascii", errors="ignore").strip()
-                    match = pattern.match(line)
-                    if not match:
-                        continue
-                    can_id = match.group(1)
-                    dlc = int(match.group(2))
-                    data_str = match.group(3).strip()
-                    data_bytes = [int(b, 16) for b in data_str.split() if b]
+            while not stop:
+                if paused:
+                    time.sleep(0.1)
+                    continue
+                line = ser.readline().decode("ascii", errors="ignore").strip()
+                m = pattern.match(line)
+                if not m:
+                    continue
+                ts_ms = int(time.time() * 1000)
+                can_id = m.group(1)
+                dlc = int(m.group(2))
+                data = [int(b, 16) for b in m.group(3).strip().split() if b]
+                log.write(
+                    f"{ts_ms},{can_id},{dlc},{' '.join(f'{b:02X}' for b in data)}\n"
+                )
+                log.flush()
 
-                    id_field = can_id
-                    if data_bytes and data_bytes[0] == 0x41 and len(data_bytes) > 1:
-                        pid = data_bytes[1]
-                        if pid in PID_NAMES:
-                            id_field = PID_NAMES[pid]
-                    ts_ms = int(time.time() * 1000)
-                    log.write(
-                        f"{ts_ms},{id_field},{dlc},{' '.join(f'{b:02X}' for b in data_bytes)}\n"
-                    )
-                    log.flush()
-            except KeyboardInterrupt:
-                pass
-        log_line("Serial logging terminated.", NEON_MAGENTA)
+        log_line("Serial logging terminated", NEON_MAGENTA)
 
-    # -- DBC loading and command sending ---------------------------------
+    # -- DBC loading / command sending ----------------------------------
     def load_dbc(self, path: str) -> None:
         if cantools is None:
-            raise RuntimeError("cantools is required to load DBC files")
+            raise RuntimeError("cantools required to load DBC")
         self.db = cantools.database.load_file(path)
 
     def send_command(self, message: str, channel: str = "can0", **signals: float) -> bool:
-        """Encode and transmit a command defined in the loaded DBC.
-
-        Returns ``True`` if the frame was sent successfully, otherwise ``False``.
-        """
-        if cantools is None or can is None:
-            raise RuntimeError("cantools and python-can are required to send commands")
         if self.db is None:
             raise RuntimeError("DBC not loaded")
-
+        if can is None:
+            raise RuntimeError("python-can required to send frames")
         msg = self.db.get_message_by_name(message)
         data = msg.encode(signals)
-        interface = "socketcan" if hasattr(socket, "CMSG_SPACE") else "virtual"
+        iface = "socketcan" if hasattr(socket, "CMSG_SPACE") else "virtual"
         try:
-            with can.interface.Bus(channel=channel, interface=interface) as bus:
-                try:
-                    bus.send(can.Message(arbitration_id=msg.frame_id, data=data))
-                except can.CanError as exc:
-                    system_alert(f"Failed to send CAN message: {exc}")
-                    return False
-        except (OSError, NotImplementedError) as exc:
-            system_alert(f"Failed to access CAN interface '{channel}': {exc}")
+            with can.interface.Bus(channel=channel, interface=iface) as bus:
+                bus.send(can.Message(arbitration_id=msg.frame_id, data=data))
+        except Exception as exc:  # pragma: no cover - hardware dependant
+            system_alert(f"Send failed: {exc}")
             return False
         return True
 
-    def interactive_send_command(self, channel: str = "can0") -> bool:
-        """Interactively choose a message and signals to transmit."""
-        if self.db is None:
-            system_alert("DBC not loaded")
-            return False
-        print_divider()
-        print(neon("Select message:", NEON_MAGENTA))
-        messages = self.db.messages
-        for idx, msg in enumerate(messages, start=1):
-            print(neon(f"{idx}. {msg.name}"))
-        try:
-            msg_idx = int(input("Message number: "))
-            chosen = messages[msg_idx - 1]
-        except (ValueError, IndexError):
-            system_alert("Invalid selection")
-            return False
-        signals: dict[str, float] = {}
-        for sig in chosen.signals:
-            default = getattr(sig, "initial", 0)
-            val_str = input(f"{sig.name} [{default}]: ")
-            if val_str:
-                try:
-                    signals[sig.name] = float(val_str)
-                except ValueError:
-                    system_alert(f"Invalid value for {sig.name}")
-        return self.send_command(chosen.name, channel, **signals)
-
+    # -- PID handling ----------------------------------------------------
     def send_pid_request(
         self, pid: int, channel: str = "can0", timeout: float = 1.0
     ) -> Optional[str]:
-        """Send an OBD-II PID request and wait for a response.
+        """Send a single PID request and decode the response."""
 
-        Returns the decoded response string if a frame is received within
-        ``timeout`` seconds, otherwise ``None``.
-        """
         if can is None:
-            raise RuntimeError("python-can is required to send PID requests")
-        data = bytes([0x02, 0x01, pid, 0x00, 0x00, 0x00, 0x00, 0x00])
-        interface = "socketcan" if hasattr(socket, "CMSG_SPACE") else "virtual"
+            raise RuntimeError("python-can required for PID requests")
+        data = bytes([0x02, 0x01, pid, 0, 0, 0, 0, 0])
+        iface = "socketcan" if hasattr(socket, "CMSG_SPACE") else "virtual"
         try:
-            with can.interface.Bus(channel=channel, interface=interface) as bus:
-                try:
-                    bus.send(can.Message(arbitration_id=0x7DF, data=data))
-                except can.CanError as exc:
-                    system_alert(f"Failed to send CAN message: {exc}")
-                    return None
-                try:
-                    msg = bus.recv(timeout)
-                except can.CanError as exc:
-                    system_alert(f"Failed to receive CAN message: {exc}")
-                    return None
-                if msg:
-                    frame = CANFrame(
-                        int(time.time() * 1000),
-                        msg.arbitration_id,
-                        msg.dlc,
-                        list(msg.data),
-                    )
-                    return self.decode_obd_pid(frame)
-        except (OSError, NotImplementedError) as exc:
-            system_alert(f"Failed to access CAN interface '{channel}': {exc}")
+            with can.interface.Bus(channel=channel, interface=iface) as bus:
+                bus.send(can.Message(arbitration_id=0x7DF, data=data))
+                msg = bus.recv(timeout)
+        except Exception as exc:  # pragma: no cover - hardware dependant
+            system_alert(f"PID request failed: {exc}")
             return None
-        return None
+        if not msg:
+            return None
+        frame = CANFrame(int(time.time() * 1000), msg.arbitration_id, msg.dlc, list(msg.data))
+        return self.decode_pid(frame)
 
-    def interactive_menu(self, channel: str = "can0") -> None:
-        """Interactive menu allowing the user to send PID requests."""
-        print_banner("ACCESS PANEL")
-        if can is None:
-            msg = "\n".join(
-                [
-                    "╔════════════════════════════════════════════════════════════╗",
-                    "║  python-can module not detected!                           ║",
-                    "║  Install it with: pip install python-can                   ║",
-                    "╚════════════════════════════════════════════════════════════╝",
-                ]
-            )
-            print(neon(msg, NEON_MAGENTA))
-            return
+    def decode_pid(self, frame: CANFrame) -> Optional[str]:
+        if len(frame.data) < 4 or frame.data[1] != 0x41:
+            return None
+        pid = frame.data[2]
+        payload = frame.data[3:]
+        if pid in PID_MAP:
+            name, decoder = PID_MAP[pid]
+            return decoder(payload)
+        return f"PID 0x{pid:02X}: {' '.join(f'{b:02X}' for b in payload)}"
+
+    def pid_console(self, channel: str = "can0") -> None:
+        """Interactive PID request loop."""
+
         while True:
             print_divider()
-            print(neon("\nSelect PID to request:", NEON_MAGENTA))
-            for idx, (pid, name) in enumerate(PID_NAMES.items(), start=1):
+            print(neon("Select PID (0 to exit):", NEON_MAGENTA))
+            for idx, (pid, (name, _)) in enumerate(PID_MAP.items(), start=1):
                 print(neon(f"{idx}. {name} (0x{pid:02X})"))
-            print(neon("0. EXIT", NEON_MAGENTA))
             choice = input("[PID] > ")
             if choice == "0":
                 break
             try:
-                pid = list(PID_NAMES.keys())[int(choice) - 1]
+                pid = list(PID_MAP.keys())[int(choice) - 1]
             except (ValueError, IndexError):
                 system_alert("Invalid selection")
                 continue
-            log_line(f"Sent request for {PID_NAMES[pid]}")
-            response = self.send_pid_request(pid, channel)
-            if response:
-                log_line(response)
+            resp = self.send_pid_request(pid, channel)
+            if resp:
+                log_line(resp)
             else:
-                system_alert("No response received")
+                system_alert("No response")
 
+    # -- Interactive command sender ------------------------------------
+    def interactive_send(self, channel: str = "can0") -> None:
+        if self.db is None:
+            system_alert("DBC not loaded")
+            return
+        messages = self.db.messages
+        print_divider()
+        for idx, msg in enumerate(messages, start=1):
+            print(neon(f"{idx}. {msg.name}"))
+        try:
+            idx = int(input("Select message: "))
+            chosen = messages[idx - 1]
+        except (ValueError, IndexError):
+            system_alert("Invalid selection")
+            return
+        values: dict[str, float] = {}
+        for sig in chosen.signals:
+            val = input(f"{sig.name} [{getattr(sig, 'initial', 0)}]: ")
+            if val:
+                try:
+                    values[sig.name] = float(val)
+                except ValueError:
+                    system_alert(f"Invalid value for {sig.name}")
+        if self.send_command(chosen.name, channel, **values):
+            log_line("TRANSMISSION COMPLETE", NEON_GREEN)
 
+    # -- Menu -----------------------------------------------------------
     def main_menu(self) -> None:
-        """Present a high-level functionality menu."""
         while True:
             print_divider()
-            print(neon("\nSelect function:", NEON_MAGENTA))
-            options = [
-                "Parse CAN log",
-                "Build DBC from log",
-                "Log frames from serial port",
-                "Send command from DBC",
-                "Interactive PID menu",
-            ]
-            for idx, name in enumerate(options, 1):
-                print(neon(f"{idx}. {name}"))
+            print(neon("Select function:", NEON_MAGENTA))
+            print(neon("1. Log frames from serial port"))
+            print(neon("2. Send command from DBC"))
+            print(neon("3. Interactive PID console"))
             print(neon("0. EXIT", NEON_MAGENTA))
             choice = input("[CMD] > ")
             if choice == "1":
-                path = input("Log path: ")
-                frames = self.parse_log(path)
-                for f in frames[:10]:
-                    decoded = self.decode_obd_pid(f)
-                    if decoded:
-                        log_line(f"0x{f.can_id:03X} :: {decoded}")
-            elif choice == "2":
-                log_path = input("Log path: ")
-                output = input("Output DBC path: ")
-                frames = self.parse_log(log_path)
-                self.build_dbc(frames, output)
-                log_line(f"DBC WRITTEN TO {output}")
-            elif choice == "3":
                 port = input("Serial port [COM3]: ") or "COM3"
                 try:
                     baud = int(input("Baudrate [115200]: ") or "115200")
                 except ValueError:
                     system_alert("Invalid baudrate")
                     continue
-                self.log_serial_frames(port, baud)
-            elif choice == "4":
+                self.log_serial(port, baud)
+            elif choice == "2":
                 dbc = input("DBC path: ")
-                self.load_dbc(dbc)
+                try:
+                    self.load_dbc(dbc)
+                except Exception as exc:
+                    system_alert(str(exc))
+                    continue
                 channel = input("Channel [can0]: ") or "can0"
-                if self.interactive_send_command(channel):
-                    log_line("TRANSMISSION COMPLETE", NEON_GREEN)
-            elif choice == "5":
+                self.interactive_send(channel)
+            elif choice == "3":
                 channel = input("Channel [can0]: ") or "can0"
-                self.interactive_menu(channel)
+                self.pid_console(channel)
             elif choice == "0":
                 break
             else:
                 system_alert("Invalid selection")
 
 
-# ---------------------------------------------------------------------------
-# CLI entry point
-# ---------------------------------------------------------------------------
-
+# CLI entry point --------------------------------------------------------------
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Master CAN bus decoding engine")
+    parser = argparse.ArgumentParser(description="Neon soaked CAN bus utility")
     sub = parser.add_subparsers(dest="cmd")
 
-    p_parse = sub.add_parser("parse", help="Parse a CAN log CSV")
-    p_parse.add_argument("log")
+    p_serial = sub.add_parser("serial", help="Log frames from a serial port")
+    p_serial.add_argument("port", nargs="?", default="COM3")
+    p_serial.add_argument("baudrate", type=int, nargs="?", default=115200)
 
-    p_build = sub.add_parser("builddbc", help="Build DBC from log")
-    p_build.add_argument("log")
-    p_build.add_argument("output")
-
-    p_log = sub.add_parser("serial", help="Log frames from serial port")
-    p_log.add_argument("port", nargs="?", default="COM3")
-    p_log.add_argument("baudrate", type=int, nargs="?", default=115200)
-
-    p_send = sub.add_parser("send", help="Send command from DBC")
+    p_send = sub.add_parser("send", help="Send a command from a DBC")
     p_send.add_argument("dbc")
     p_send.add_argument("message", nargs="?")
     p_send.add_argument("signals", nargs="*", help="Signal=value pairs")
     p_send.add_argument("--channel", default="can0")
 
-    p_menu = sub.add_parser("menu", help="Interactive menu to send PID requests")
-    p_menu.add_argument("--channel", default="can0")
+    p_pid = sub.add_parser("pid", help="Interactive PID console")
+    p_pid.add_argument("--channel", default="can0")
 
     args = parser.parse_args()
-    engine = CANEngine()
+    bot = CANb0t()
     print(BANNER)
-    print_banner("CONNECTION ESTABLISHED")
-    pseudo_data_stream(2)
 
-    if args.cmd == "parse":
-        print_banner("ACCESS GRANTED")
-        system_alert("TRACE ROUTE INITIATED")
-        simulate_progress("Processing log")
-        frames = engine.parse_log(args.log)
-        for f in frames[:10]:
-            decoded = engine.decode_obd_pid(f)
-            if decoded:
-                log_line(f"0x{f.can_id:03X} :: {decoded}")
-    elif args.cmd == "builddbc":
-        print_banner("ASSEMBLING DBC")
-        simulate_progress("Compiling")
-        frames = engine.parse_log(args.log)
-        engine.build_dbc(frames, args.output)
-        log_line(f"DBC WRITTEN TO {args.output}")
-    elif args.cmd == "serial":
-        engine.log_serial_frames(args.port, args.baudrate)
+    if args.cmd == "serial":
+        bot.log_serial(args.port, args.baudrate)
     elif args.cmd == "send":
-        print_banner("TRANSMISSION")
-        engine.load_dbc(args.dbc)
+        bot.load_dbc(args.dbc)
         if args.message:
-            signal_values = {}
+            values = {}
             for pair in args.signals:
                 if "=" not in pair:
                     continue
                 name, val = pair.split("=", 1)
-                signal_values[name] = float(val)
-            engine.send_command(args.message, args.channel, **signal_values)
-            log_line("TRANSMISSION COMPLETE", NEON_GREEN)
-        else:
-            if engine.interactive_send_command(args.channel):
+                values[name] = float(val)
+            if bot.send_command(args.message, args.channel, **values):
                 log_line("TRANSMISSION COMPLETE", NEON_GREEN)
-    elif args.cmd == "menu":
-        engine.interactive_menu(args.channel)
+        else:
+            bot.interactive_send(args.channel)
+    elif args.cmd == "pid":
+        bot.pid_console(args.channel)
     else:
-        engine.main_menu()
+        bot.main_menu()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - CLI behaviour
     main()
+
