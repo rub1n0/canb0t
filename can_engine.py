@@ -242,6 +242,41 @@ class CANb0t:
             else:
                 system_alert("No response")
 
+    def _load_recent_values(self, log_path: str = "CANLOG.CSV") -> dict[str, dict[str, float]]:
+        """Return last observed signal values for messages in ``log_path``.
+
+        The CSV is expected to contain lines of ``timestamp_ms,id,dlc,data`` with
+        hexadecimal identifiers and byte values separated by spaces.  Each line is
+        decoded using the currently loaded DBC so that signal defaults can be
+        prepopulated when sending commands interactively.
+        """
+
+        defaults: dict[str, dict[str, float]] = {}
+        if self.db is None:
+            return defaults
+        try:
+            with open(log_path) as log:
+                next(log, None)  # skip header if present
+                for line in log:
+                    parts = line.strip().split(",", 3)
+                    if len(parts) < 4:
+                        continue
+                    _, can_id, _, data_str = parts
+                    try:
+                        frame_id = int(can_id, 16)
+                        msg = self.db.get_message_by_frame_id(frame_id)
+                    except Exception:
+                        continue
+                    data = bytes(int(b, 16) for b in data_str.split())
+                    try:
+                        decoded = msg.decode(data)
+                    except Exception:
+                        continue
+                    defaults[msg.name] = decoded
+        except FileNotFoundError:
+            pass
+        return defaults
+
     # -- Interactive command sender ------------------------------------
     def interactive_send(self, channel: str = "can0") -> None:
         if self.db is None:
@@ -257,14 +292,19 @@ class CANb0t:
         except (ValueError, IndexError):
             system_alert("Invalid selection")
             return
+        defaults = self._load_recent_values()
+        prior = defaults.get(chosen.name, {})
         values: dict[str, float] = {}
         for sig in chosen.signals:
-            val = input(f"{sig.name} [{getattr(sig, 'initial', 0)}]: ")
+            default_val = prior.get(sig.name, getattr(sig, "initial", 0))
+            val = input(f"{sig.name} [{default_val}]: ")
             if val:
                 try:
                     values[sig.name] = float(val)
                 except ValueError:
                     system_alert(f"Invalid value for {sig.name}")
+            else:
+                values[sig.name] = float(default_val)
         if self.send_command(chosen.name, channel, **values):
             log_line("TRANSMISSION COMPLETE", NEON_GREEN)
 
